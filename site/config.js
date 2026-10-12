@@ -1,2 +1,2 @@
 // Set this to your GitHub "owner/repo" so the report button opens the right form.
-window.OPENSARGASSO = { repo: "OWNER/opensargasso" };
+window.OPENSARGASSO = { repo: "CraftLoopAI/opensargasso" };
