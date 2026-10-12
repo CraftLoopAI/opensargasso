@@ -1,0 +1,62 @@
+name: Sargassum sighting
+description: Report what you see on a beach. Reviewed before it appears on the map.
+title: "Sighting: "
+labels: ["sargassum-report"]
+body:
+  - type: dropdown
+    id: beach
+    attributes:
+      label: Beach
+      description: Pick the beach, or choose Other and fill in the coordinates below.
+      options:
+        - Orient Bay (Baie Orientale)
+        - Le Galion
+        - Cul-de-Sac
+        - Anse Marcel
+        - Grand Case
+        - Friar's Bay (Anse des Pères)
+        - Marigot
+        - Baie Rouge
+        - Baie Longue
+        - Mullet Bay
+        - Maho Beach
+        - Simpson Bay
+        - Little Bay
+        - Great Bay (Philipsburg)
+        - Guana Bay
+        - Dawn Beach
+        - Oyster Pond
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: latitude
+    attributes:
+      label: Latitude
+      description: Only needed for Other. Example 18.089
+  - type: input
+    id: longitude
+    attributes:
+      label: Longitude
+      description: Only needed for Other. Example -63.018
+  - type: dropdown
+    id: amount
+    attributes:
+      label: Amount
+      options:
+        - None (beach is clear)
+        - Light (scattered clumps)
+        - Moderate (a band along the shore)
+        - Heavy (thick mats)
+    validations:
+      required: true
+  - type: input
+    id: observed
+    attributes:
+      label: Observed on
+      description: Date as YYYY-MM-DD. Leave empty for today.
+  - type: textarea
+    id: note
+    attributes:
+      label: Note
+      description: Optional, up to 140 characters. Photos are welcome as attachments.

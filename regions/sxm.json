@@ -1,0 +1,38 @@
+{
+  "id": "sxm",
+  "name": "Saint-Martin / Sint Maarten",
+  "languages": ["en", "fr", "nl"],
+  "bbox": {"west": -66.0, "east": -58.5, "south": 15.0, "north": 20.5},
+  "view": {"center": [18.065, -63.07], "zoom": 12},
+  "afai": {"stride": 2, "threshold": 0.0005, "background_block_deg": 0.75},
+  "drift": {
+    "days": 7,
+    "step_hours": 3,
+    "windage": 0.02,
+    "diffusion_deg": 0.02,
+    "max_particles": 2500,
+    "fallback_current_ms": [-0.25, 0.05],
+    "wind_ms": [-6.5, -1.5]
+  },
+  "risk": {"radius_km": 10, "low": 1, "moderate": 3, "high": 8},
+  "sites_note": "Coordinates are approximate (entered by hand, not yet checked against OpenStreetMap). At a 10 km risk radius the error does not change results, but verify before using them for navigation or signage.",
+  "sites": [
+    {"id": "orient-bay", "name": "Orient Bay (Baie Orientale)", "side": "FR", "lat": 18.089, "lon": -63.018},
+    {"id": "le-galion", "name": "Le Galion", "side": "FR", "lat": 18.071, "lon": -63.016},
+    {"id": "cul-de-sac", "name": "Cul-de-Sac", "side": "FR", "lat": 18.103, "lon": -63.027},
+    {"id": "anse-marcel", "name": "Anse Marcel", "side": "FR", "lat": 18.114, "lon": -63.040},
+    {"id": "grand-case", "name": "Grand Case", "side": "FR", "lat": 18.105, "lon": -63.057},
+    {"id": "friars-bay", "name": "Friar's Bay (Anse des Pères)", "side": "FR", "lat": 18.083, "lon": -63.076},
+    {"id": "marigot", "name": "Marigot", "side": "FR", "lat": 18.069, "lon": -63.085},
+    {"id": "baie-rouge", "name": "Baie Rouge", "side": "FR", "lat": 18.066, "lon": -63.127},
+    {"id": "baie-longue", "name": "Baie Longue", "side": "FR", "lat": 18.056, "lon": -63.150},
+    {"id": "mullet-bay", "name": "Mullet Bay", "side": "NL", "lat": 18.043, "lon": -63.124},
+    {"id": "maho", "name": "Maho Beach", "side": "NL", "lat": 18.039, "lon": -63.120},
+    {"id": "simpson-bay", "name": "Simpson Bay", "side": "NL", "lat": 18.031, "lon": -63.098},
+    {"id": "little-bay", "name": "Little Bay", "side": "NL", "lat": 18.018, "lon": -63.061},
+    {"id": "great-bay", "name": "Great Bay (Philipsburg)", "side": "NL", "lat": 18.021, "lon": -63.046},
+    {"id": "guana-bay", "name": "Guana Bay", "side": "NL", "lat": 18.035, "lon": -63.019},
+    {"id": "dawn-beach", "name": "Dawn Beach", "side": "NL", "lat": 18.043, "lon": -63.018},
+    {"id": "oyster-pond", "name": "Oyster Pond", "side": "NL", "lat": 18.052, "lon": -63.015}
+  ]
+}

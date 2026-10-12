@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OpenSargasso | Saint-Martin / Sint Maarten</title>
+<meta name="description" content="Free, open sargassum forecast for Saint-Martin / Sint Maarten: satellite detection, a 7-day outlook per beach and sightings from the beach.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cg fill='%23a8650c'%3E%3Cpath d='M6.5 28.5c3-4.6 5.4-7 8-10.4 2.9-3.8 5.6-8 10.6-12.6' fill='none' stroke='%23a8650c' stroke-width='2.6' stroke-linecap='round'/%3E%3Cpath d='M14.6 18.2c3.6-2 7.4-1.6 10 .6-3.4 2.2-7 2-10-.6zM10.4 23.3c-1-3.8-4-6-7.4-6.3 1 3.6 3.8 5.8 7.4 6.3zM18.6 12.4c-.4-3.5 1.4-6.6 4.4-8.2.6 3.4-1.2 6.6-4.4 8.2z'/%3E%3Ccircle cx='27' cy='20.6' r='2.4'/%3E%3Ccircle cx='3.6' cy='14.2' r='2.2'/%3E%3Ccircle cx='26.8' cy='10.4' r='2'/%3E%3C/g%3E%3C/svg%3E">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="anonymous">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap top-in">
+    <a class="brand" href="./">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
+        <path d="M6.5 28.5c3-4.6 5.4-7 8-10.4 2.9-3.8 5.6-8 10.6-12.6" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>
+        <g fill="currentColor">
+          <path d="M14.6 18.2c3.6-2 7.4-1.6 10 .6-3.4 2.2-7 2-10-.6zM10.4 23.3c-1-3.8-4-6-7.4-6.3 1 3.6 3.8 5.8 7.4 6.3zM18.6 12.4c-.4-3.5 1.4-6.6 4.4-8.2.6 3.4-1.2 6.6-4.4 8.2z"/>
+          <circle cx="27" cy="20.6" r="2.4"/><circle cx="3.6" cy="14.2" r="2.2"/><circle cx="26.8" cy="10.4" r="2"/>
+        </g>
+      </svg>
+      <span>OpenSargasso</span>
+    </a>
+    <span class="place" id="place"></span>
+    <nav class="lang" id="lang" aria-label="Language"></nav>
+  </div>
+  <div class="wrap">
+    <nav class="views" id="views">
+      <a href="#beaches" data-view="beaches"></a>
+      <a href="#managers" data-view="managers"></a>
+      <a href="#data" data-view="data"></a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="notice" id="sample" hidden></div>
+  <div class="notice warn" id="stale" hidden></div>
+  <div class="notice warn" id="error" hidden></div>
+
+  <div class="view" id="view-beaches">
+    <section class="intro">
+      <h1 id="headline"></h1>
+      <p class="tag" id="tagline"></p>
+    </section>
+
+    <section class="stage">
+      <div class="days">
+        <div class="strip" id="days" role="radiogroup"></div>
+        <button class="play" id="play" type="button"></button>
+      </div>
+      <div class="stage-grid">
+        <div class="mapbox">
+          <div id="map" role="application" aria-label="Map"></div>
+          <div class="mapbar">
+            <p class="cap" id="mapcap" aria-live="polite"></p>
+            <div class="legend" id="legend"></div>
+          </div>
+        </div>
+        <section class="board" aria-labelledby="h-outlook">
+          <h2 id="h-outlook"></h2>
+          <p class="small" id="outlook-help"></p>
+          <div class="bd" id="sites"></div>
+        </section>
+      </div>
+    </section>
+
+    <div class="lower">
+      <section class="block" aria-labelledby="h-reports">
+        <h2 id="h-reports"></h2>
+        <ul class="reports" id="reports"></ul>
+        <a class="btn" id="report-btn" target="_blank" rel="noopener"></a>
+        <p class="small" id="report-help"></p>
+      </section>
+      <section class="block" aria-labelledby="h-data">
+        <h2 id="h-data"></h2>
+        <dl class="data" id="data"></dl>
+        <ul class="files">
+          <li><a href="#data" id="to-methods"></a></li>
+          <li><a href="data/latest.json" id="dl-json"></a></li>
+          <li><a href="data/reports.geojson" id="dl-reports"></a></li>
+        </ul>
+      </section>
+    </div>
+  </div>
+
+  <div class="view" id="view-managers" hidden>
+    <section class="intro">
+      <h1 id="m-title"></h1>
+      <p class="tag" id="m-intro"></p>
+    </section>
+    <section class="panel" aria-labelledby="m-h-sides">
+      <h2 id="m-h-sides"></h2>
+      <div class="sides" id="m-sides"></div>
+      <div class="legend" id="m-legend"></div>
+    </section>
+    <section class="panel" aria-labelledby="m-h-table">
+      <div class="panel-head">
+        <div>
+          <h2 id="m-h-table"></h2>
+          <p class="small" id="m-table-help"></p>
+        </div>
+        <button class="btn" id="csv" type="button"></button>
+      </div>
+      <div class="tbl-wrap"><table class="ew" id="m-table"></table></div>
+      <p class="small" id="csv-help"></p>
+    </section>
+    <section class="block quality" aria-labelledby="m-h-quality">
+      <h2 id="m-h-quality"></h2>
+      <dl class="data" id="m-data"></dl>
+    </section>
+  </div>
+
+  <div class="view" id="view-data" hidden>
+    <section class="intro">
+      <h1 id="r-title"></h1>
+      <p class="tag" id="r-intro"></p>
+    </section>
+    <div class="docs">
+      <div class="docs-col">
+        <section class="doc" aria-labelledby="r-h-files"><h2 id="r-h-files"></h2><table class="files-tbl" id="r-files"></table></section>
+        <section class="doc" aria-labelledby="r-h-example"><h2 id="r-h-example"></h2><pre class="code" id="r-example"></pre></section>
+        <section class="doc" aria-labelledby="r-h-fields"><h2 id="r-h-fields"></h2><table class="files-tbl" id="r-fields"></table></section>
+      </div>
+      <div class="docs-col">
+        <section class="doc" aria-labelledby="r-h-method"><h2 id="r-h-method"></h2><ol class="steps" id="r-method"></ol></section>
+        <section class="doc" aria-labelledby="r-h-sources"><h2 id="r-h-sources"></h2><dl class="data" id="r-sources"></dl></section>
+        <section class="doc" aria-labelledby="r-h-run"><h2 id="r-h-run"></h2><dl class="data" id="r-run"></dl></section>
+        <section class="doc" aria-labelledby="r-h-cite"><h2 id="r-h-cite"></h2><ul class="refs" id="r-cite"></ul></section>
+        <section class="doc" aria-labelledby="r-h-limits"><h2 id="r-h-limits"></h2><ul class="refs" id="r-limits"></ul></section>
+      </div>
+    </div>
+  </div>
+
+  <footer id="footer"></footer>
+</main>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="anonymous"></script>
+<script src="config.js"></script>
+<script src="i18n.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
