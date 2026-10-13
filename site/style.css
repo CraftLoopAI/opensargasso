@@ -107,6 +107,10 @@ h2{font-size:20px;line-height:1.25;font-weight:700}
 .bd-row.on .nm{color:var(--accent)}
 .bd-row .c{display:flex;align-items:center;justify-content:center}
 .bd .sel{background:var(--band)}
+/* Days 4 to 7: carried-forward levels lose skill, so they are drawn fainter */
+.c.unc i,.bd-head .unc{opacity:.45}
+.strip .unc .wd,.strip .unc .dn{opacity:.55}
+.strip .unc[aria-checked="true"] .wd,.strip .unc[aria-checked="true"] .dn{opacity:.8}
 .c i{display:block;width:14px;height:14px;border-radius:3px}
 .bd-row .lv{align-self:center;display:flex;align-items:center;gap:6px;padding-left:10px;font-size:14px}
 @media (max-width:520px){

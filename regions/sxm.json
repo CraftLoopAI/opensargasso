@@ -15,7 +15,7 @@
     "fallback_current_ms": [-0.25, 0.05],
     "wind_ms": [-6.5, -1.5]
   },
-  "risk": {"radius_km": 10, "low": 1, "moderate": 3, "high": 8},
+  "risk": {"radius_km": 50, "low": 21, "moderate": 24, "high": 33},
   "sites": [
     {"id": "orient-bay", "name": "Orient Bay (Baie Orientale)", "side": "FR", "lat": 18.0868, "lon": -63.0171, "osm": ["w151155089", "w151155090"]},
     {"id": "le-galion", "name": "Le Galion", "side": "FR", "lat": 18.0774, "lon": -63.0166, "osm": ["r9561099"]},

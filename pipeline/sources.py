@@ -31,6 +31,13 @@ WIND = {
     "verified": True,  # 3-hourly analyses, then the newest forecast about 7.5 days ahead
 }
 
+SIR = {
+    "name": "NOAA AOML Sargassum Inundation Risk (SIR v1.5), with USF",
+    "page": "https://cwcgom.aoml.noaa.gov/SIR/",
+    "kmz": "https://cwcgom.aoml.noaa.gov/SIR/KMZ/sargassum_risk_{date}.kmz",
+    "verified": True,  # daily, one to two days behind; levels 0 low, 1 warning, 2 medium, 3 high
+}
+
 COAST = {
     "name": "OpenStreetMap coastline, 0.002 degree grid",
     "url": "https://www.openstreetmap.org/copyright",

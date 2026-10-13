@@ -64,11 +64,21 @@ def make_land_test(land):
     return is_land
 
 
-def seed_particles(detections, max_particles: int, rng: random.Random, cell_deg: float):
+def seeds_for(excess: float) -> int:
     """One to three particles per detected pixel, more for stronger signals."""
+    return 1 + min(2, int(excess / 0.001))
+
+
+def seed_particles(detections, max_particles: int, rng: random.Random, cell_deg: float):
+    """Particles for the detected pixels, sampled down to `max_particles`.
+
+    When sampled, each particle stands for several seeds: weigh counts by
+    sum(seeds_for(...)) / len(result), or more sargassum elsewhere in the box
+    would mean fewer particles near any one beach.
+    """
     seeds = []
     for lon, lat, excess in detections:
-        for _ in range(1 + min(2, int(excess / 0.001))):
+        for _ in range(seeds_for(excess)):
             seeds.append((lon + (rng.random() - 0.5) * cell_deg, lat + (rng.random() - 0.5) * cell_deg))
     if len(seeds) > max_particles:
         seeds = rng.sample(seeds, max_particles)

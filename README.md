@@ -2,9 +2,9 @@
 
 Free, open sargassum monitoring for the Caribbean, starting with **Saint-Martin / Sint Maarten**.
 
-It reads open satellite data once a day, flags floating sargassum, forecasts where it drifts over the next 7 days, and grades each beach as Clear, Low, Moderate or High. The result is a static website in English, French and Dutch. There is no server and no paid service.
+It reads open satellite data once a day, flags floating sargassum, forecasts where it drifts over the next 7 days, and shows each beach's level from NOAA's Sargassum Inundation Risk: Low, Warning, Medium or High. The result is a static website in English, French and Dutch. There is no server and no paid service.
 
-> **Status: experimental.** The pipeline runs end to end on live NOAA data (first run 12 October 2026) and on synthetic sample data, and has unit tests. The risk levels are not calibrated. See [Status](#status).
+> **Status: experimental.** The pipeline runs end to end on live NOAA data (first run 12 October 2026) and on synthetic sample data, and has unit tests. Beach levels come from NOAA's Sargassum Inundation Risk, which beat our own drift forecast in a backtest ([docs/CALIBRATION.md](docs/CALIBRATION.md)). See [Status](#status).
 
 ## Quick start
 
@@ -40,7 +40,7 @@ NOAA / USF open data ──> pipeline (Python) ──> site/data/*.json ──> 
 | Fetch | `pipeline/erddap.py`, `sources.py`, `landmask.py` | Downloads the AFAI satellite index, surface currents and the GFS wind forecast as CSV, and reads the stored coastline land mask |
 | Detect | `pipeline/detect.py` | Flags pixels whose AFAI stands out above the local background |
 | Drift | `pipeline/drift.py` | Moves particles with currents and wind for 7 days; they stop at land |
-| Risk | `pipeline/risk.py` | Counts particles within 10 km of each beach, per day |
+| Beach levels | `pipeline/sir.py`, `risk.py` | Takes NOAA SIR for the coast nearest each beach; the drift model's particle counts within 50 km are the fallback |
 | Publish | `pipeline/run.py` | Writes `latest.json` and a small daily history file |
 | Sightings | `pipeline/reports.py` | Turns an approved issue into a point in `reports.geojson` |
 
@@ -57,7 +57,7 @@ More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/DATA_SOURCES.md
 | Detection near land | Pixels that touch land are skipped (Tintamarre was flagged as sargassum), and so are pixels next to land the AFAI product masked, where coastal glare looks like algae. Real mats in that first pixel are missed |
 | Currents | NOAA AOML geostrophic currents, 1 to 2 days old in October 2026. Kept after a comparison with SMOC total currents via Open-Meteo (13 October 2026); see `docs/DATA_SOURCES.md` |
 | Wind | NOAA GFS 10 m wind forecast (0.5 degrees, every 3 hours) from the satellite date to the end of the newest forecast, since 13 October 2026. The region's constant trade wind is the fallback |
-| Risk thresholds | **Uncalibrated** first guesses |
+| Beach levels | NOAA SIR, latest report carried forward over the week, days 4 to 7 marked less certain (13 October 2026). The drift model's thresholds (50 km: 21, 24, 33) were fitted against SIR and are the fallback. Not yet checked against sightings. See `docs/CALIBRATION.md` |
 | Beach coordinates | Checked against OpenStreetMap on 13 October 2026. Each beach records the OSM feature its position comes from (`osm`); Cul-de-Sac, Marigot and Oyster Pond have no mapped beach and use the bay or place |
 | Website | Three views (beaches, coastal managers, data and methods), viewed with live tiles in Chromium at desktop and phone width, light and dark, English and French, on 12 October 2026. Not yet checked in Safari, Firefox or on a real phone |
 | Translations | French and Dutch text written by the model, not yet reviewed by native speakers |

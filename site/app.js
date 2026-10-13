@@ -3,7 +3,7 @@
   var $ = function (id) { return document.getElementById(id); };
   var state = { lang: "en", day: 0, data: null, reports: [], base: 0, today: -1, sel: null, timer: null,
                 map: null, layers: {}, markers: {} };
-  var STALE_DAYS = 10, DAY_MS = 864e5, STEP_MS = 900;
+  var STALE_DAYS = 10, DAY_MS = 864e5, STEP_MS = 900, UNCERTAIN_FROM = 4;  // persistence loses skill after day 3
   var ICON = {
     play: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9.5-5.5z" fill="currentColor"/></svg>',
     pause: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 2.5h3.2v11H3.5zM9.3 2.5h3.2v11H9.3z" fill="currentColor"/></svg>',
@@ -75,7 +75,7 @@
     });
     $("place").textContent = state.data ? state.data.region.name : "";
     $("tagline").textContent = t("tagline");
-    $("h-outlook").textContent = t("outlook"); $("outlook-help").textContent = t("outlookHelp");
+    $("h-outlook").textContent = t("outlook"); $("outlook-help").textContent = outlookHelp();
     $("h-reports").textContent = t("reports"); $("report-btn").textContent = t("reportBtn"); $("report-help").textContent = t("reportHelp");
     $("h-data").textContent = t("data");
     $("dl-json").textContent = t("json"); $("dl-reports").textContent = t("reportsFile"); $("to-methods").textContent = t("moreMethods");
@@ -107,11 +107,18 @@
     if (state.reports.length) { var rp = item(); rp.appendChild(el("i", "diamond")); rp.appendChild(document.createTextNode(t("legendReport"))); }
   }
 
+  /* Beach levels come from NOAA SIR unless the pipeline fell back to the drift model. */
+  function sirInfo() { var s = state.data && state.data.sources.sir; return s && s.fallback === false ? s : null; }
+  function fromSir() { return !!sirInfo(); }
+  function outlookHelp() { var s = sirInfo(); return s ? t("outlookSir", { d: fmtDate(s.date) }) : t("outlookModel"); }
+  function unc(k) { return k >= UNCERTAIN_FROM; }
+
   function renderHeadline() {
     var d = state.data;
     if (!d) { $("headline").textContent = t("title"); return; }
     var n = d.sites.filter(function (s) { return outlook(s).first >= 0; }).length;
-    $("headline").textContent = n ? t("headline", { n: n, total: d.sites.length }) : t("headlineNone");
+    var noaa = fromSir();
+    $("headline").textContent = n ? t(noaa ? "headline" : "headlineModel", { n: n, total: d.sites.length }) : t(noaa ? "headlineNone" : "headlineModelNone");
   }
 
   function renderNotices() {
@@ -129,7 +136,7 @@
     seen.innerHTML = ICON.satellite; seen.appendChild(el("span", "tx", t("seen")));
     [seen, fc].forEach(function (c) { c.setAttribute("aria-hidden", "true"); strip.appendChild(c); });
     for (var k = 0; k <= lastDay(); k++) {
-      var b = el("button", k === state.today ? "today" : null); b.type = "button"; b.dataset.day = k;
+      var b = el("button", [k === state.today ? "today" : "", unc(k) ? "unc" : ""].join(" ").trim() || null); b.type = "button"; b.dataset.day = k;
       b.setAttribute("role", "radio");
       b.setAttribute("aria-label", longDay(k) + ", " + (k === 0 ? t("seen") : t("forecast")) + (k === state.today ? ", " + t("today") : ""));
       b.appendChild(el("span", "wd", fmtDay(k, { weekday: "short" }).replace(/\.$/, "")));
@@ -149,7 +156,8 @@
   function renderCaption() {
     if (!state.data) return;
     var k = state.day, d = longDay(k);
-    $("mapcap").textContent = k === 0 ? t("capSeen", { d: d }) : t(k === state.today ? "capToday" : "capForecast", { d: d });
+    $("mapcap").textContent = (k === 0 ? t("capSeen", { d: d }) : t(k === state.today ? "capToday" : "capForecast", { d: d })) +
+      (unc(k) ? " (" + t("lessCertain") + ")" : "");
   }
 
   function setDay(k) {
@@ -179,7 +187,7 @@
     var head = el("div", "bd-head"); head.setAttribute("aria-hidden", "true");
     head.appendChild(el("span"));
     for (var k = 0; k <= lastDay(); k++) {
-      head.appendChild(el("span", [k === day ? "sel" : "", k === state.today ? "today" : ""].join(" ").trim() || null, String(dayNum(k))));
+      head.appendChild(el("span", [k === day ? "sel" : "", k === state.today ? "today" : "", unc(k) ? "unc" : ""].join(" ").trim() || null, String(dayNum(k))));
     }
     head.appendChild(el("span", "lvh"));
     box.appendChild(head);
@@ -195,7 +203,7 @@
     b.appendChild(el("span", "nm", s.name));
     var week = [];
     s.risk.forEach(function (r, k) {
-      var c = el("span", "c" + (k === day ? " sel" : "")), i = el("i", "l" + r);
+      var c = el("span", "c" + (k === day ? " sel" : "") + (unc(k) ? " unc" : "")), i = el("i", "l" + r);
       c.title = longDay(k) + ": " + levels[r]; c.appendChild(i); b.appendChild(c);
       week.push(fmtDay(k, { weekday: "short" }).replace(/\.$/, "") + " " + dayNum(k) + ": " + levels[r]);
     });
@@ -229,6 +237,8 @@
     function row(k, v) { dl.appendChild(el("dt", null, k)); dl.appendChild(el("dd", null, v)); }
     var s = d.sources;
     row(t("dGenerated"), fmtDate(d.generated));
+    var si = sirInfo();
+    row(t("dLevels"), si ? t("levelsSir", { d: fmtDate(si.date) }) + (si.age_days != null ? " (" + ageText(si.age_days) + ")" : "") : t("levelsModel"));
     row(t("dAfai"), fmtDate(s.afai.time) + (s.afai.age_days != null ? " (" + ageText(s.afai.age_days) + ")" : ""));
     row(t("dCurrents"), s.currents.fallback ? t("fallback") : fmtDate(s.currents.time) + (s.currents.age_days != null ? " (" + ageText(s.currents.age_days) + ")" : ""));
     row(t("dWind"), windText(s.wind));
@@ -486,9 +496,9 @@
     var local = state.lang === "fr" || state.lang === "nl", sep = local ? ";" : ",";
     function coord(x) { return local ? String(x).replace(".", ",") : x; }
     for (var k = 0; k <= lastDay(); k++) days.push(isoDay(k));
-    var head = ["id", "name", "side", "lat", "lon"].concat(days, days.map(function (x) { return x + " " + t("csvParticles"); }));
+    var head = ["id", "name", "side", "lat", "lon", "source"].concat(days, days.map(function (x) { return x + " " + t("csvParticles"); }));
     var rows = d.sites.map(function (s) {
-      return [s.id, s.name, s.side || "", coord(s.lat), coord(s.lon)].concat(s.risk.map(function (r) { return levels[r]; }), s.count);
+      return [s.id, s.name, s.side || "", coord(s.lat), coord(s.lon), s.source || ""].concat(s.risk.map(function (r) { return levels[r]; }), s.count);
     });
     // The byte order mark lets spreadsheet programs read accented names correctly.
     var text = "\ufeff" + [head].concat(rows).map(function (r) { return r.map(function (v) { return csvCell(v, sep); }).join(sep); }).join("\r\n") + "\r\n";
@@ -532,6 +542,7 @@
       var s = d.sources;
       [[t("dAfai"), s.afai, fmtDate(s.afai.time) + (s.afai.age_days != null ? " (" + ageText(s.afai.age_days) + ")" : "")],
        [t("dCurrents"), s.currents, s.currents.fallback ? t("fallback") : fmtDate(s.currents.time) + (s.currents.age_days != null ? " (" + ageText(s.currents.age_days) + ")" : "")],
+       [t("dLevels"), s.sir || { name: "NOAA SIR" }, s.sir && s.sir.fallback === false ? t("reportOf", { d: fmtDate(s.sir.date) }) : t("levelsModel")],
        [t("dLand"), s.land, s.land.available ? "" : t("unavailable")],
        [t("dWind"), s.wind.fallback === false ? s.wind : { name: t("windFallback") },
         s.wind.fallback === false ? t("windUntil", { d: fmtDate(s.wind.until) }) : ""]].forEach(function (r) {
@@ -564,7 +575,7 @@
     cite.appendChild(me);
 
     var lim = $("r-limits"); lim.textContent = "";
-    ["l1", "l2", "l3", "l4", "l5"].forEach(function (k) { lim.appendChild(el("li", null, t(k))); });
+    ["l1", "l2", "l3", "l4", "l5", "l6"].forEach(function (k) { lim.appendChild(el("li", null, t(k))); });
   }
 
   function renderAll() {

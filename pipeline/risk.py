@@ -24,11 +24,12 @@ def level_for(count: int, cfg: dict) -> int:
     return 0
 
 
-def site_risk(tracks, sites, cfg: dict, days: int):
+def site_risk(tracks, sites, cfg: dict, days: int, weight: float = 1.0):
     """For each site and day, count particles within `radius_km` and grade it.
 
-    The thresholds are first guesses and have not been calibrated against
-    observed landings. See docs/ROADMAP.md.
+    `weight` is how many seeds each particle stands for after sampling. The
+    thresholds were fitted against NOAA SIR (docs/CALIBRATION.md); the site
+    shows SIR itself and uses these levels only when SIR is missing.
     """
     out = []
     for s in sites:
@@ -39,7 +40,7 @@ def site_risk(tracks, sites, cfg: dict, days: int):
                 lon, lat, state = tr[d]
                 if state != LEFT and distance_km(lon, lat, s["lon"], s["lat"]) <= cfg["radius_km"]:
                     n += 1
-            counts.append(n)
+            counts.append(round(n * weight))
         out.append({**{k: s[k] for k in ("id", "name", "side", "lat", "lon") if k in s},
                     "count": counts, "risk": [level_for(n, cfg) for n in counts]})
     return out

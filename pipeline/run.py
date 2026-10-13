@@ -12,7 +12,7 @@ import pathlib
 import random
 import sys
 
-from . import __version__, detect, drift, erddap, landmask, risk, sample, sources
+from . import __version__, detect, drift, erddap, landmask, risk, sample, sir, sources
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -36,8 +36,8 @@ def age_days(stamp: str | None, now: dt.datetime):
     return None if when is None else (now - when).days
 
 
-def fetch_inputs(region: dict, cache_dir: pathlib.Path, log):
-    """Live inputs. AFAI is required; currents, wind and land degrade gracefully."""
+def fetch_inputs(region: dict, cache_dir: pathlib.Path, log, today: dt.date | None = None):
+    """Live inputs. AFAI is required; currents, wind, land and SIR degrade gracefully."""
     bbox, notes = region["bbox"], []
     afai = erddap.fetch_grid(sources.AFAI, bbox, stride=region["afai"]["stride"])
     try:
@@ -66,7 +66,14 @@ def fetch_inputs(region: dict, cache_dir: pathlib.Path, log):
     except Exception as e:  # noqa: BLE001
         notes.append(f"land mask unavailable ({e}); particles cannot beach")
         log(notes[-1])
-    return afai, currents, wind, land, notes
+    try:
+        day, segments = sir.fetch_latest(today or dt.datetime.now(dt.timezone.utc).date(), bbox)
+        sir_levels = (day, sir.site_levels(region["sites"], segments))
+    except Exception as e:  # noqa: BLE001
+        sir_levels = None
+        notes.append(f"NOAA SIR unavailable ({e}); beach levels come from the drift model")
+        log(notes[-1])
+    return afai, currents, wind, land, sir_levels, notes
 
 
 def land_source(land) -> dict:
@@ -82,7 +89,27 @@ def wind_source(wind, region: dict) -> dict:
     return {"name": "constant trade wind from the region file", "ms": region["drift"]["wind_ms"], "fallback": True}
 
 
-def build(region: dict, afai, currents, land, notes, is_sample: bool, now: dt.datetime, wind=None) -> dict:
+def sir_source(sir_levels, now: dt.datetime) -> dict:
+    base = {"name": sources.SIR["name"], "url": sources.SIR["page"]}
+    if not sir_levels:
+        return {**base, "fallback": True}
+    day = sir_levels[0]
+    return {**base, "date": day.isoformat(), "age_days": (now.date() - day).days, "fallback": False}
+
+
+def beach_levels(model_sites, sir_levels, days: int):
+    """Each beach shows the latest SIR level for every day (it beat our drift in the
+    backtest); the drift model's own levels stay in `model` and fill in where SIR has none."""
+    levels = sir_levels[1] if sir_levels else {}
+    out = []
+    for m in model_sites:
+        level = levels.get(m["id"])
+        out.append({**m, "model": m["risk"], "risk": [level] * (days + 1) if level is not None else m["risk"],
+                    "source": "sir" if level is not None else "model"})
+    return out
+
+
+def build(region: dict, afai, currents, land, notes, is_sample: bool, now: dt.datetime, wind=None, sir_levels=None) -> dict:
     a, d = region["afai"], region["drift"]
     is_land = drift.make_land_test(land)
     cell = abs(afai.dlon)
@@ -90,11 +117,12 @@ def build(region: dict, afai, currents, land, notes, is_sample: bool, now: dt.da
                                       is_land=is_land, pixel_deg=cell / a["stride"])
     rng = random.Random(now.toordinal())
     seeds = drift.seed_particles(detections, d["max_particles"], rng, cell)
+    weight = sum(drift.seeds_for(x) for _, _, x in detections) / len(seeds) if seeds else 1.0
     tracks = drift.simulate(
         seeds, drift.make_velocity(currents, d["fallback_current_ms"]), is_land,
         region["bbox"], days=d["days"], step_hours=d["step_hours"], windage=d["windage"],
         wind=drift.make_wind(wind, parse_time(afai.time) or now, d["wind_ms"]), diffusion_deg=d["diffusion_deg"], rng=rng)
-    sites = risk.site_risk(tracks, region["sites"], region["risk"], d["days"])
+    sites = beach_levels(risk.site_risk(tracks, region["sites"], region["risk"], d["days"], weight), sir_levels, d["days"])
     forecast = [[[round(tr[day][0], 3), round(tr[day][1], 3), tr[day][2]] for tr in tracks if tr[day][2] != drift.LEFT]
                 for day in range(d["days"] + 1)]
     return {
@@ -111,6 +139,7 @@ def build(region: dict, afai, currents, land, notes, is_sample: bool, now: dt.da
                          "fallback": currents is None},
             "wind": wind_source(wind, region),
             "land": {**land_source(land), "available": land is not None},
+            "sir": sir_source(sir_levels, now),
         },
         "notes": notes,
         "settings": {"threshold": a["threshold"], "background_block_deg": a["background_block_deg"],
@@ -151,14 +180,14 @@ def main(argv=None) -> int:
         bbox = region["bbox"]
         afai, currents, land, notes = sample.afai_grid(bbox), sample.currents_grid(bbox), sample.land_grid(bbox), \
             ["synthetic sample data, not an observation"]
-        wind = None
+        wind = sir_levels = None
     else:
         try:
-            afai, currents, wind, land, notes = fetch_inputs(region, ROOT / ".cache", log)
+            afai, currents, wind, land, sir_levels, notes = fetch_inputs(region, ROOT / ".cache", log, now.date())
         except Exception as e:  # noqa: BLE001
             log(f"AFAI fetch failed, keeping the previous output: {e}")
             return 1
-    result = build(region, afai, currents, land, notes, args.sample, now, wind=wind)
+    result = build(region, afai, currents, land, notes, args.sample, now, wind=wind, sir_levels=sir_levels)
     write_outputs(result, pathlib.Path(args.out), now)
     log(f"{result['stats']['detected']} pixels flagged, {len(result['forecast'][0])} particles, "
         f"AFAI time {result['sources']['afai']['time']}")

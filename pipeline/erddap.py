@@ -122,13 +122,18 @@ def _num(s: str) -> float:
 
 
 def fetch_text(url: str, timeout: int = 180, retries: int = 3, backoff: float = 5.0) -> str:
+    """GET a URL as text. Retries network and 5xx errors; 4xx errors raise at once."""
+    return fetch_bytes(url, timeout, retries, backoff).decode("utf-8", errors="replace")
+
+
+def fetch_bytes(url: str, timeout: int = 180, retries: int = 3, backoff: float = 5.0) -> bytes:
     """GET a URL. Retries network and 5xx errors; 4xx errors raise at once."""
     last = None
     for attempt in range(retries):
         try:
             req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
             with urllib.request.urlopen(req, timeout=timeout) as resp:
-                return resp.read().decode("utf-8", errors="replace")
+                return resp.read()
         except urllib.error.HTTPError as e:
             if e.code < 500:
                 raise

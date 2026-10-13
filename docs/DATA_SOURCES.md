@@ -9,6 +9,7 @@ Checked in October 2026. "Verified" means the dataset ID and variable names were
 | Land mask | OpenStreetMap `natural=coastline`, filled into a grid and stored in `regions/land/` | https://overpass-api.de (only when rebuilt) | 0.002 degrees, about 220 m | Yes |
 | Land mask fallback | `etopo180`, variable `altitude`, for regions without a stored mask | https://coastwatch.pfeg.noaa.gov/erddap | 1 arc-minute | Yes |
 | Wind | `ncep_global_lon180` (NCEP GFS), variables `ugrd10m`, `vgrd10m` (m/s); the region's constant trade wind is the fallback | https://upwell.pfeg.noaa.gov/erddap | 0.5 degrees, every 3 hours: analyses, then the newest forecast about 7.5 days ahead | Yes |
+| Beach levels | NOAA AOML Sargassum Inundation Risk (SIR v1.5), with USF; KMZ of coastal segments graded low, warning, medium, high | https://cwcgom.aoml.noaa.gov/SIR/ | daily, one to two days behind, from a 50 to 100 km AFAI neighborhood | Yes |
 | Basemap | OpenStreetMap tiles | https://tile.openstreetmap.org | | Standard |
 
 ## Things to know

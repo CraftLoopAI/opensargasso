@@ -1,13 +1,14 @@
 # Fixtures
 
-Small real ERDDAP responses, saved on 12 October 2026 so the live CSV format is pinned by the tests (`test_fixtures.py`, `test_wind.py`). Each was requested with `erddap.griddap_url` at stride 1.
+Small real ERDDAP responses, saved on 12 October 2026 so the live formats are pinned by the tests (`test_fixtures.py`, `test_wind.py`, `test_sir.py`). Each was requested with `erddap.griddap_url` at stride 1.
 
 ```
 fixtures/
 ├── afai.csv        AFAI 7D, 2026-10-11, east coast of Saint Martin and Tintamarre (land cells are NaN)
 ├── currents.csv    miamicurrents, 2026-10-10, 3 x 3 cells around the island
 ├── land.csv        etopo180, same area as afai.csv (no time column)
-└── wind.csv        ncep_global_lon180 (GFS), 2026-10-12 12:00 and 15:00 UTC, 3 x 3 cells
+├── wind.csv        ncep_global_lon180 (GFS), 2026-10-12 12:00 and 15:00 UTC, 3 x 3 cells
+└── sir.kml         NOAA SIR of 2026-10-11: the 10 segments around Saint Martin and 2 far away, unchanged KML
 ```
 
 To refresh one, request the same box again:

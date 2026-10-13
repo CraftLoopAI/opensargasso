@@ -9,7 +9,8 @@ Goal: a forecast local people can trust.
 - [x] Check beach coordinates against OpenStreetMap
 - [x] Real wind: replace the constant trade wind with a forecast source
 - [x] Decide on currents: keep geostrophic or move to HYCOM, based on data lag (kept geostrophic; see `docs/DATA_SOURCES.md`)
-- [ ] Calibrate risk thresholds against sightings and NOAA's Sargassum Inundation Risk, and test SMOC total currents (Open-Meteo) with about 1 % windage
+- [x] Calibrate against NOAA's Sargassum Inundation Risk and test SMOC currents (`docs/CALIBRATION.md`): beach levels now come from SIR, SMOC did not help
+- [ ] Check beach levels against citizen sightings once there are some
 - [ ] Find local partners for sightings and validation (nature foundations, the Réserve Naturelle, hotels, dive shops)
 - [ ] Sighting form that does not need a GitHub account
 
