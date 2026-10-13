@@ -69,7 +69,7 @@ A visitor opens the issue form, picks a beach and an amount. A maintainer checks
 
 ## Known limits
 
-- Geostrophic currents are coarse (0.2 degrees) and miss nearshore flow, tides and wind-driven surface currents.
+- Geostrophic currents are coarse (0.2 degrees) and miss nearshore flow, tides and wind-driven surface currents, and one day of currents is used for the whole week.
 - The 7-day AFAI composite hides day-to-day movement, and clouds leave gaps.
 - The land mask has cells of about 220 m, so the smallest islets and channels can be missed.
 - GFS wind is on a 0.5 degree grid (about 55 km), so wind effects around the island itself are missed.

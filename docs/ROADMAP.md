@@ -8,8 +8,8 @@ Goal: a forecast local people can trust.
 - [x] Confirm the land mask dataset, or replace it with an OpenStreetMap coastline
 - [x] Check beach coordinates against OpenStreetMap
 - [x] Real wind: replace the constant trade wind with a forecast source
-- [ ] Decide on currents: keep geostrophic or move to HYCOM, based on data lag
-- [ ] Calibrate risk thresholds against sightings and NOAA's Sargassum Inundation Risk
+- [x] Decide on currents: keep geostrophic or move to HYCOM, based on data lag (kept geostrophic; see `docs/DATA_SOURCES.md`)
+- [ ] Calibrate risk thresholds against sightings and NOAA's Sargassum Inundation Risk, and test SMOC total currents (Open-Meteo) with about 1 % windage
 - [ ] Find local partners for sightings and validation (nature foundations, the Réserve Naturelle, hotels, dive shops)
 - [ ] Sighting form that does not need a GitHub account
 

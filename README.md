@@ -55,6 +55,7 @@ More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/DATA_SOURCES.md
 | Live download | Works. First run 12 October 2026: AFAI 1 day old, currents 2 days old. Response formats pinned by `tests/fixtures/` |
 | Land mask | OpenStreetMap coastline in 220 m cells, stored in `regions/land/` (13 October 2026). Simpson Bay Lagoon, Oyster Pond and Pinel are resolved, and the daily run needs no land download (3 seconds instead of 80) |
 | Detection near land | Pixels that touch land are skipped (Tintamarre was flagged as sargassum), and so are pixels next to land the AFAI product masked, where coastal glare looks like algae. Real mats in that first pixel are missed |
+| Currents | NOAA AOML geostrophic currents, 1 to 2 days old in October 2026. Kept after a comparison with SMOC total currents via Open-Meteo (13 October 2026); see `docs/DATA_SOURCES.md` |
 | Wind | NOAA GFS 10 m wind forecast (0.5 degrees, every 3 hours) from the satellite date to the end of the newest forecast, since 13 October 2026. The region's constant trade wind is the fallback |
 | Risk thresholds | **Uncalibrated** first guesses |
 | Beach coordinates | Checked against OpenStreetMap on 13 October 2026. Each beach records the OSM feature its position comes from (`osm`); Cul-de-Sac, Marigot and Oyster Pond have no mapped beach and use the bay or place |
