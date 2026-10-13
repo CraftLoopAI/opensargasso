@@ -3,7 +3,7 @@
   var $ = function (id) { return document.getElementById(id); };
   var state = { lang: "en", day: 0, data: null, reports: [], base: 0, today: -1, sel: null, timer: null,
                 map: null, layers: {}, markers: {} };
-  var STALE_DAYS = 10, DAY_MS = 864e5, STEP_MS = 900, UNCERTAIN_FROM = 4;  // persistence loses skill after day 3
+  var STALE_DAYS = 10, OUTDATED_DAYS = 2, DAY_MS = 864e5, STEP_MS = 900, UNCERTAIN_FROM = 4;  // persistence loses skill after day 3
   var ICON = {
     play: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9.5-5.5z" fill="currentColor"/></svg>',
     pause: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 2.5h3.2v11H3.5zM9.3 2.5h3.2v11H9.3z" fill="currentColor"/></svg>',
@@ -19,7 +19,11 @@
   }
   function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
-  function fmtDate(iso) { if (!iso || iso === "sample") return "-"; var d = new Date(iso); return isNaN(d) ? iso : d.toLocaleDateString(state.lang, { year: "numeric", month: "short", day: "numeric" }); }
+  function fmtDate(iso) { if (!iso || iso === "sample") return "-"; var d = new Date(iso); return isNaN(d) ? iso : d.toLocaleDateString(state.lang, { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" }); }
+  /* Ages are worked out now, in the browser, so they keep counting if the daily update stops. */
+  function ageDays(iso) { var t0 = Date.parse(iso); return isNaN(t0) ? null : Math.max(0, Math.floor((Date.now() - t0) / DAY_MS)); }
+  function ageSuffix(iso) { var n = ageDays(iso); return n == null ? "" : " (" + ageText(n) + ")"; }
+  function expired() { return state.data && state.today > lastDay(); }
   function lastDay() { return state.data ? state.data.forecast.length - 1 : 7; }
   function reduceMotion() { return window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches; }
 
@@ -82,13 +86,14 @@
     Array.prototype.forEach.call($("views").querySelectorAll("a"), function (a) { a.textContent = t("v_" + a.dataset.view); });
     $("views").setAttribute("aria-label", t("viewsLabel"));
     [["m-title", "mTitle"], ["m-intro", "mIntro"], ["m-h-sides", "mSides"], ["m-h-table", "mTable"], ["m-table-help", "mTableHelp"],
-     ["csv", "csv"], ["csv-help", "csvHelp"], ["m-h-quality", "mQuality"], ["r-title", "rTitle"], ["r-intro", "rIntro"],
+     ["csv", "csv"], ["m-h-quality", "mQuality"], ["r-title", "rTitle"], ["r-intro", "rIntro"],
      ["r-h-files", "rFiles"], ["r-h-example", "rExample"], ["r-h-fields", "rFields"], ["r-h-method", "rMethod"],
      ["r-h-sources", "rSources"], ["r-h-run", "rRun"], ["r-h-cite", "rCite"], ["r-h-limits", "rLimits"]]
       .forEach(function (x) { $(x[0]).textContent = t(x[1]); });
     $("footer").textContent = t("footer");
     if ($("map").className === "nomap") $("map").textContent = t("nomap");
     $("days").setAttribute("aria-label", t("dayPicker"));
+    $("csv-help").textContent = t("csvHelp", { radius: state.data ? fmtNum(state.data.settings.radius_km) : "?" });
     var repo = (window.OPENSARGASSO || {}).repo || "";
     $("report-btn").href = "https://github.com/" + repo + "/issues/new?template=sargassum-report.yml";
     renderLegend();
@@ -98,11 +103,11 @@
     var lg = $("legend"); lg.textContent = "";
     function item(cls) { var s = el("span", "lg " + (cls || "")); lg.appendChild(s); return s; }
     var sea = item(), ends = el("span", "ends");
-    sea.appendChild(el("span", null, t("legendSea")));
+    sea.appendChild(el("span", null, t(state.day === 0 ? "legendSeen" : "legendDrift")));
     ends.appendChild(el("span", null, t("less"))); ends.appendChild(el("i", "ramp")); ends.appendChild(el("span", null, t("more")));
     sea.appendChild(ends);
-    var ashore = item(); ashore.appendChild(el("i", "dot")); ashore.appendChild(document.createTextNode(t("legendAshore")));
-    var lv = item(); lv.appendChild(el("span", null, t("legendBeach")));
+    if (state.day > 0) { var ashore = item(); ashore.appendChild(el("i", "dot")); ashore.appendChild(document.createTextNode(t("legendAshore"))); }
+    var lv = item(); lv.appendChild(el("span", null, t(fromSir() || !state.data ? "legendBeachSir" : "legendBeachModel")));
     t("levels").forEach(function (name, r) { var s = el("span", "lvl"); s.appendChild(el("i", "chip l" + r)); s.appendChild(document.createTextNode(name)); lv.appendChild(s); });
     if (state.reports.length) { var rp = item(); rp.appendChild(el("i", "diamond")); rp.appendChild(document.createTextNode(t("legendReport"))); }
   }
@@ -116,6 +121,7 @@
   function renderHeadline() {
     var d = state.data;
     if (!d) { $("headline").textContent = t("title"); return; }
+    if (expired()) { $("headline").textContent = t("headlineExpired", { d: fmtDate(d.generated) }); return; }
     var n = d.sites.filter(function (s) { return outlook(s).first >= 0; }).length;
     var noaa = fromSir();
     $("headline").textContent = n ? t(noaa ? "headline" : "headlineModel", { n: n, total: d.sites.length }) : t(noaa ? "headlineNone" : "headlineModelNone");
@@ -124,8 +130,10 @@
   function renderNotices() {
     var d = state.data;
     $("sample").hidden = !(d && d.sample); $("sample").textContent = t("sample");
-    var age = d && d.sources.afai.age_days;
+    var age = d ? ageDays(d.sources.afai.time) : null, built = d ? ageDays(d.generated) : null;
     $("stale").hidden = !(age != null && age > STALE_DAYS); $("stale").textContent = t("stale", age);
+    $("outdated").hidden = !(built != null && built >= OUTDATED_DAYS && !d.sample);
+    $("outdated").textContent = d ? t("outdated", { d: fmtDate(d.generated) }) : "";
   }
 
   /* ---------- day picker ---------- */
@@ -162,7 +170,7 @@
 
   function setDay(k) {
     state.day = Math.max(0, Math.min(lastDay(), k));
-    syncDays(); renderCaption(); renderSites(); drawMap();
+    syncDays(); renderCaption(); renderLegend(); renderSites(); drawMap();
   }
 
   function renderPlay() {
@@ -238,11 +246,11 @@
     var s = d.sources;
     row(t("dGenerated"), fmtDate(d.generated));
     var si = sirInfo();
-    row(t("dLevels"), si ? t("levelsSir", { d: fmtDate(si.date) }) + (si.age_days != null ? " (" + ageText(si.age_days) + ")" : "") : t("levelsModel"));
-    row(t("dAfai"), fmtDate(s.afai.time) + (s.afai.age_days != null ? " (" + ageText(s.afai.age_days) + ")" : ""));
-    row(t("dCurrents"), s.currents.fallback ? t("fallback") : fmtDate(s.currents.time) + (s.currents.age_days != null ? " (" + ageText(s.currents.age_days) + ")" : ""));
+    row(t("dLevels"), si ? t("levelsSir", { d: fmtDate(si.date) }) + ageSuffix(si.date) : t("levelsModel"));
+    row(t("dAfai"), fmtDate(s.afai.time) + ageSuffix(s.afai.time));
+    row(t("dCurrents"), s.currents.fallback ? t("fallback") : fmtDate(s.currents.time) + ageSuffix(s.currents.time));
     row(t("dWind"), windText(s.wind));
-    row(t("dPixels"), d.stats.detected.toLocaleString(state.lang) + " (AFAI > " + d.settings.threshold + ")");
+    row(t("dPixels"), d.stats.detected.toLocaleString(state.lang) + " (" + t("pixelsRule", { t: fmtNum(d.settings.threshold) }) + ")");
     row(t("dCloud"), Math.round(100 * d.stats.nodata / d.stats.pixels) + " %");
   }
 
@@ -253,6 +261,7 @@
      with the sargassum ramp, so neighboring cells merge into mats. */
   function makeDensityLayer() {
     return L.Layer.extend({
+      initialize: function (options) { L.setOptions(this, options); },  // without this the `pane` option is ignored
       onAdd: function (map) {
         this._canvas = L.DomUtil.create("canvas", "leaflet-zoom-hide", this.getPane());
         map.on("moveend resize", this._draw, this);
@@ -344,7 +353,8 @@
         }
       });
     } else {
-      pts = d.forecast[day].filter(function (p) { return p[2] === 0; }).map(function (p) { return [p[0], p[1], 0.45]; });
+      var heavy = 1 - Math.pow(1 - 0.45, d.stats.particle_weight || 1);  // one particle drawn as `weight` seeds
+      pts = d.forecast[day].filter(function (p) { return p[2] === 0; }).map(function (p) { return [p[0], p[1], heavy]; });
     }
     state.layers.density.setData(pts, cell, ramp().slice(1));
     drawMarkers();
@@ -496,7 +506,7 @@
     var local = state.lang === "fr" || state.lang === "nl", sep = local ? ";" : ",";
     function coord(x) { return local ? String(x).replace(".", ",") : x; }
     for (var k = 0; k <= lastDay(); k++) days.push(isoDay(k));
-    var head = ["id", "name", "side", "lat", "lon", "source"].concat(days, days.map(function (x) { return x + " " + t("csvParticles"); }));
+    var head = ["id", "name", "side", "lat", "lon", "source"].concat(days, days.map(function (x) { return x + " " + t("csvParticles"); }));  // weighted model counts
     var rows = d.sites.map(function (s) {
       return [s.id, s.name, s.side || "", coord(s.lat), coord(s.lon), s.source || ""].concat(s.risk.map(function (r) { return levels[r]; }), s.count);
     });
@@ -540,8 +550,8 @@
     var src = $("r-sources"); src.textContent = "";
     if (d) {
       var s = d.sources;
-      [[t("dAfai"), s.afai, fmtDate(s.afai.time) + (s.afai.age_days != null ? " (" + ageText(s.afai.age_days) + ")" : "")],
-       [t("dCurrents"), s.currents, s.currents.fallback ? t("fallback") : fmtDate(s.currents.time) + (s.currents.age_days != null ? " (" + ageText(s.currents.age_days) + ")" : "")],
+      [[t("dAfai"), s.afai, fmtDate(s.afai.time) + ageSuffix(s.afai.time)],
+       [t("dCurrents"), s.currents, s.currents.fallback ? t("fallback") : fmtDate(s.currents.time) + ageSuffix(s.currents.time)],
        [t("dLevels"), s.sir || { name: "NOAA SIR" }, s.sir && s.sir.fallback === false ? t("reportOf", { d: fmtDate(s.sir.date) }) : t("levelsModel")],
        [t("dLand"), s.land, s.land.available ? "" : t("unavailable")],
        [t("dWind"), s.wind.fallback === false ? s.wind : { name: t("windFallback") },

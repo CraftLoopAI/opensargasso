@@ -10,21 +10,32 @@ jobs:
   publish:
     if: github.event.label.name == 'report-approved' && contains(github.event.issue.labels.*.name, 'sargassum-report')
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - name: Add the report
-        run: python -m pipeline.reports --event "$GITHUB_EVENT_PATH" --region sxm
+        id: add
+        shell: bash   # with pipefail, so a rejected report fails this step
+        run: python -m pipeline.reports --event "$GITHUB_EVENT_PATH" --region sxm | tee report.log
       - name: Commit
         run: |
           git config user.name "opensargasso-bot"
           git config user.email "opensargasso-bot@users.noreply.github.com"
           git add site/data/reports.geojson
           git diff --cached --quiet || git commit -m "report: sighting #${{ github.event.issue.number }}"
+          git pull --rebase origin main   # the daily update may have pushed meanwhile
           git push
       - name: Close the issue
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh issue close ${{ github.event.issue.number }} --repo ${{ github.repository }} --comment "Published. It appears on the map after the next daily update."
+      - name: Explain a rejected report
+        if: failure() && steps.add.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          { echo "This sighting could not be published:"; echo; tail -n 3 report.log 2>/dev/null || echo "see the workflow log"; } > reply.md
+          gh issue comment ${{ github.event.issue.number }} --repo ${{ github.repository }} --body-file reply.md

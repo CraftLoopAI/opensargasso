@@ -1,12 +1,11 @@
 import json
 import math
 import pathlib
-import random
 import tempfile
 import unittest
 import urllib.error
 
-from pipeline import detect, drift, erddap, reports, risk, run, sample
+from pipeline import detect, drift, erddap, reports, risk, run
 
 BBOX = {"west": -64.0, "east": -62.0, "south": 17.0, "north": 19.0}
 CSV = """time,latitude,longitude,AFAI

@@ -19,3 +19,14 @@ def test_output_has_method_settings_and_source_links(tmp_path):
     assert data["sources"]["afai"]["url"].endswith("/griddap/noaa_aoml_atlantic_oceanwatch_AFAI_7D.html")
     assert data["sources"]["currents"]["url"].endswith("/griddap/miamicurrents.html")
     assert data["sources"]["land"]["url"].endswith("/griddap/etopo180.html")
+
+
+def test_output_has_particle_weight_and_history_records_its_source(tmp_path):
+    assert run.main(["--region", "sxm", "--sample", "--out", str(tmp_path)]) == 0
+    data = json.loads((tmp_path / "latest.json").read_text())
+    assert data["stats"]["particle_weight"] >= 1.0
+    day = json.loads((tmp_path / "history" / "index.json").read_text())[-1]
+    history = json.loads((tmp_path / "history" / f"{day}.json").read_text())
+    assert history["sir_date"] is None                           # sample runs have no SIR
+    assert set(history["level_source"].values()) == {"model"}
+    assert set(history["level_source"]) == set(history["sites"])

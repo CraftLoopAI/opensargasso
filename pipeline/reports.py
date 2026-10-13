@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
 import pathlib
 import re
@@ -44,12 +45,31 @@ def to_feature(fields: dict, region: dict, issue_number: int, created: str) -> d
     if not (b["south"] <= lat <= b["north"] and b["west"] <= lon <= b["east"]):
         raise ValueError("location is outside the monitored region")
     note = re.sub(r"\s+", " ", fields.get("note", ""))[:140]
+    # The reporter's day, on the island: an evening report is already tomorrow in UTC.
+    filed = local_date(created, region.get("utc_offset_hours", 0))
     observed = fields.get("observed on", "")
-    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", observed):
-        observed = created[:10]
+    if observed:
+        try:
+            seen = dt.date.fromisoformat(observed)
+        except ValueError:
+            raise ValueError(f"observed date '{observed}' is not a date as YYYY-MM-DD") from None
+        if filed and seen > filed:
+            raise ValueError(f"observed date {observed} is after the report was sent")
+        observed = seen.isoformat()
+    else:
+        observed = filed.isoformat() if filed else ""
     return {"type": "Feature", "geometry": {"type": "Point", "coordinates": [round(lon, 5), round(lat, 5)]},
             "properties": {"id": issue_number, "level": AMOUNTS[amount], "beach": site["name"] if site else "",
                            "note": note, "observed": observed}}
+
+
+def local_date(stamp: str, offset_hours: float):
+    """The calendar date of a UTC timestamp at a fixed UTC offset, or None."""
+    try:
+        when = dt.datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+    except (AttributeError, ValueError):
+        return None
+    return (when + dt.timedelta(hours=offset_hours)).date()
 
 
 def append_report(path: pathlib.Path, feature: dict) -> bool:

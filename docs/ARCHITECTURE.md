@@ -52,7 +52,7 @@ opensargasso/
 3. **Seed.** Each flagged pixel becomes one to three particles, capped at 2,500.
 4. **Drift.** Every 3 hours a particle moves with the surface current plus 2 % of the GFS wind at that hour (the nearest 3-hourly step), plus a small random step. It stops when it reaches land or leaves the box.
 5. **Grade.** Each beach takes the latest NOAA SIR level of its nearest coastal segment, for every day of the outlook (a backtest showed this beats the drift forecast; see `CALIBRATION.md`). The drift model also grades each beach from the particles within 50 km, weighted for the particle cap (21 or more is Warning, 24 Medium, 33 High); those levels are kept and fill in where SIR has none.
-6. **Publish.** `latest.json` is rewritten, a history file is added, the data is committed and the site is deployed.
+6. **Publish.** `latest.json` is rewritten, a history file is added (date, AFAI time, SIR date, detections, each beach's levels and where they came from), the data is committed and the site is deployed. The site works out data ages itself, so they keep counting and it warns if the daily update stops.
 
 ## Output format (`site/data/latest.json`)
 
@@ -60,14 +60,14 @@ opensargasso/
 |---|---|
 | `generated`, `sample` | Build time (UTC) and whether the inputs were synthetic |
 | `sources` | Data time, age in days and dataset page link for each input, and whether a fallback was used |
-| `settings`, `stats` | Run parameters (threshold, background block, windage, diffusion, step, days, particle cap, risk radius and levels, cell size); pixel counts, including `land` (candidates skipped because they touch land) |
+| `settings`, `stats` | Run parameters (threshold, background block, windage, diffusion, step, days, particle cap, risk radius and levels, cell size); pixel counts, including `land` (candidates skipped because they touch land), and `particle_weight` (seeds per drawn particle, used by the map) |
 | `detections` | `[lon, lat, excess]` per flagged pixel |
 | `forecast` | For each day 0 to 7: `[lon, lat, state]` per particle (0 afloat, 1 beached) |
 | `sites` | Per beach and day: `risk` shown (0 Low, 1 Warning, 2 Medium, 3 High), the model's `model` levels and `count`, and `source` (`sir` or `model`) |
 
 ## Citizen sightings
 
-A visitor opens the issue form, picks a beach and an amount. A maintainer checks it and adds the label `report-approved`. The workflow validates the report, appends it to `reports.geojson` and closes the issue. Moderation is built in, and the cost is zero. The trade-off is that reporters need a GitHub account; the roadmap lists a form without that requirement.
+A visitor opens the issue form, picks a beach and an amount. A maintainer checks it and adds the label `report-approved`. The workflow validates the report, appends it to `reports.geojson` and closes the issue; a rejected report gets a comment with the reason. An empty date becomes the day of filing on the island (UTC offset in the region file), and dates after filing are rejected. Moderation is built in, and the cost is zero. The trade-off is that reporters need a GitHub account; the roadmap lists a form without that requirement.
 
 ## Known limits
 

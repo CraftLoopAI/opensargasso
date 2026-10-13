@@ -137,6 +137,7 @@ def build(region: dict, afai, currents, land, notes, is_sample: bool, now: dt.da
     rng = random.Random(now.toordinal())
     seeds = drift.seed_particles(detections, d["max_particles"], rng, cell)
     weight = sum(drift.seeds_for(x) for _, _, x in detections) / len(seeds) if seeds else 1.0
+    stats = {**stats, "particle_weight": round(weight, 3)}  # seeds per drawn particle, for the map
     tracks = drift.simulate(
         seeds, drift.make_velocity(currents, d["fallback_current_ms"]), is_land,
         region["bbox"], days=d["days"], step_hours=d["step_hours"], windage=d["windage"],
@@ -177,7 +178,9 @@ def write_outputs(result: dict, out: pathlib.Path, now: dt.datetime) -> None:
     (out / "latest.json").write_text(json.dumps(result, separators=(",", ":")), encoding="utf-8")
     day = now.strftime("%Y-%m-%d")
     summary = {"date": day, "sample": result["sample"], "afai_time": result["sources"]["afai"]["time"],
-               "detected": result["stats"]["detected"], "sites": {s["id"]: s["risk"] for s in result["sites"]}}
+               "sir_date": result["sources"].get("sir", {}).get("date"), "detected": result["stats"]["detected"],
+               "sites": {s["id"]: s["risk"] for s in result["sites"]},
+               "level_source": {s["id"]: s.get("source", "model") for s in result["sites"]}}
     (out / "history" / f"{day}.json").write_text(json.dumps(summary, separators=(",", ":")), encoding="utf-8")
     dates = sorted(p.stem for p in (out / "history").glob("20*.json"))
     (out / "history" / "index.json").write_text(json.dumps(dates), encoding="utf-8")

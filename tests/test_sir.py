@@ -70,3 +70,18 @@ def test_output_records_the_sir_source():
     assert out["sources"]["sir"]["date"] == "2026-10-11" and out["sources"]["sir"]["age_days"] == 2
     assert all(s["risk"] == [2] * 8 and s["source"] == "sir" for s in out["sites"])
     assert run.build(REGION, *inputs, False, now)["sources"]["sir"]["fallback"] is True
+
+
+def test_fetch_latest_does_not_step_back_on_a_server_error():
+    asked = []
+
+    def broken(url):
+        asked.append(url)
+        raise urllib.error.HTTPError(url, 503, "busy", None, None)
+
+    try:
+        sir.fetch_latest(dt.date(2026, 10, 13), SXM, fetch=broken)
+    except urllib.error.HTTPError as e:
+        assert e.code == 503 and len(asked) == 1     # no week of retries against a failing server
+    else:
+        raise AssertionError("expected the server error")

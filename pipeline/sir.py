@@ -10,6 +10,7 @@ from __future__ import annotations
 import datetime as dt
 import io
 import re
+import urllib.error
 import zipfile
 
 from . import erddap, risk, sources
@@ -50,8 +51,10 @@ def fetch_latest(today: dt.date, bbox: dict, fetch=None):
         url = sources.SIR["kmz"].format(date=day.strftime("%Y%m%d"))
         try:
             data = fetch(url)
-        except Exception as e:  # noqa: BLE001 - a missing day is normal; try the one before
-            last = e
+        except urllib.error.HTTPError as e:
+            if e.code != 404:
+                raise
+            last = e  # no report for that day yet: try the one before
             continue
         kmz = zipfile.ZipFile(io.BytesIO(data))
         kml = kmz.read(next(n for n in kmz.namelist() if n.endswith(".kml"))).decode("utf-8", "replace")
