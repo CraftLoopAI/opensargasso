@@ -9,7 +9,7 @@ __pycache__/
 venv/
 env/
 
-# Pipeline download cache (land mask), rebuilt on demand
+# Download caches (land mask fallback, calibration), rebuilt on demand
 .cache/
 
 # Editors and operating systems
@@ -21,5 +21,3 @@ Thumbs.db
 
 # Local secrets
 .env
-
-
