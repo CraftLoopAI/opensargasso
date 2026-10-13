@@ -22,6 +22,14 @@ CURRENTS = {
     "verified": True,
 }
 
+COAST = {
+    "name": "OpenStreetMap coastline, 0.002 degree grid",
+    "url": "https://www.openstreetmap.org/copyright",
+    "overpass": "https://overpass-api.de/api/interpreter",
+    "verified": True,
+}
+
+# Fallback for regions without a stored coastline mask.
 LAND = {
     "name": "ETOPO1 global relief (land where altitude >= 0)",
     "base": "https://coastwatch.pfeg.noaa.gov/erddap",

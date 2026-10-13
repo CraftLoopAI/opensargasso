@@ -35,11 +35,16 @@ def detect(grid: Grid, threshold: float, block_deg: float = 0.75, var: str = "AF
 
     The background is the median of valid pixels in a block of about
     `block_deg` degrees, which removes large-scale glint and haze gradients.
-    With `is_land(lon, lat)`, pixels that touch land are not flagged: the AFAI
-    product leaves small islands such as Tintamarre and part-land pixels
-    unmasked, and land vegetation reads as floating algae. `pixel_deg` is the
-    sensor pixel size, which is smaller than the grid step when it is strided.
-    Returns (detections, stats); detections are (lon, lat, excess) tuples.
+    With `is_land(lon, lat)`, pixels near land are not flagged:
+    - pixels that touch land, because the AFAI product leaves small islands
+      such as Tintamarre and part-land pixels unmasked, and land vegetation
+      reads as floating algae;
+    - pixels next to a gap the product masked as land, because glare from the
+      coast raises AFAI in the first water pixel. Gaps at sea are clouds and
+      do not count.
+    `pixel_deg` is the sensor pixel size, which is smaller than the grid step
+    when it is strided. Returns (detections, stats); detections are
+    (lon, lat, excess) tuples.
     """
     field = grid.data[var]
     ny, nx = len(grid.lats), len(grid.lons)
@@ -51,6 +56,13 @@ def detect(grid: Grid, threshold: float, block_deg: float = 0.75, var: str = "AF
     global_median = statistics.median(valid_all)
     bj = max(1, round(block_deg / abs(grid.dlat)))
     bi = max(1, round(block_deg / abs(grid.dlon)))
+    def near_land(i, j):
+        if touches_land(is_land, grid.lons[i], grid.lats[j], pixel_deg):
+            return True
+        return any(0 <= j + dj < ny and 0 <= i + di < nx and not math.isfinite(field[j + dj][i + di])
+                   and is_land(grid.lons[i + di], grid.lats[j + dj])
+                   for dj in (-1, 0, 1) for di in (-1, 0, 1) if di or dj)
+
     detections = []
     for j0 in range(0, ny, bj):
         for i0 in range(0, nx, bi):
@@ -63,7 +75,7 @@ def detect(grid: Grid, threshold: float, block_deg: float = 0.75, var: str = "AF
                 excess = field[j][i] - background
                 if excess <= threshold:
                     continue
-                if is_land and touches_land(is_land, grid.lons[i], grid.lats[j], pixel_deg):
+                if is_land and near_land(i, j):
                     stats["land"] += 1
                 else:
                     detections.append((grid.lons[i], grid.lats[j], excess))

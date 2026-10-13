@@ -4,6 +4,7 @@
   "languages": ["en", "fr", "nl"],
   "bbox": {"west": -66.0, "east": -58.5, "south": 15.0, "north": 20.5},
   "view": {"center": [18.065, -63.07], "zoom": 12},
+  "land_mask": "land/sxm.json",
   "afai": {"stride": 2, "threshold": 0.0005, "background_block_deg": 0.75},
   "drift": {
     "days": 7,

@@ -12,7 +12,7 @@ import pathlib
 import random
 import sys
 
-from . import __version__, detect, drift, erddap, risk, sample, sources
+from . import __version__, detect, drift, erddap, landmask, risk, sample, sources
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -47,7 +47,9 @@ def fetch_inputs(region: dict, cache_dir: pathlib.Path, log):
     land_cache = cache_dir / f"land-{region['id']}.json"
     land = None
     try:
-        if land_cache.exists():
+        if region.get("land_mask"):  # coastline mask stored in the repo: no download
+            land = landmask.load(ROOT / "regions" / region["land_mask"])
+        elif land_cache.exists():
             land = erddap.Grid(**json.loads(land_cache.read_text()))
         else:
             land = erddap.fetch_grid(sources.LAND, bbox)
@@ -57,6 +59,12 @@ def fetch_inputs(region: dict, cache_dir: pathlib.Path, log):
         notes.append(f"land mask unavailable ({e}); particles cannot beach")
         log(notes[-1])
     return afai, currents, land, notes
+
+
+def land_source(land) -> dict:
+    if isinstance(land, landmask.LandMask):
+        return {"name": land.name, "url": land.url}
+    return {"name": sources.LAND["name"], "url": erddap.dataset_page(sources.LAND)}
 
 
 def build(region: dict, afai, currents, land, notes, is_sample: bool, now: dt.datetime) -> dict:
@@ -87,7 +95,7 @@ def build(region: dict, afai, currents, land, notes, is_sample: bool, now: dt.da
                          "age_days": age_days(currents.time, now) if currents else None,
                          "fallback": currents is None},
             "wind": {"name": "constant trade wind from the region file", "ms": d["wind_ms"]},
-            "land": {"name": sources.LAND["name"], "url": erddap.dataset_page(sources.LAND), "available": land is not None},
+            "land": {**land_source(land), "available": land is not None},
         },
         "notes": notes,
         "settings": {"threshold": a["threshold"], "background_block_deg": a["background_block_deg"],

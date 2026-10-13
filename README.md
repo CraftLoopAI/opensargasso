@@ -37,7 +37,7 @@ NOAA / USF open data ──> pipeline (Python) ──> site/data/*.json ──> 
 
 | Step | Module | What it does |
 |---|---|---|
-| Fetch | `pipeline/erddap.py`, `sources.py` | Downloads the AFAI satellite index, surface currents and a land mask as CSV |
+| Fetch | `pipeline/erddap.py`, `sources.py`, `landmask.py` | Downloads the AFAI satellite index and surface currents as CSV, and reads the stored coastline land mask |
 | Detect | `pipeline/detect.py` | Flags pixels whose AFAI stands out above the local background |
 | Drift | `pipeline/drift.py` | Moves particles with currents and wind for 7 days; they stop at land |
 | Risk | `pipeline/risk.py` | Counts particles within 10 km of each beach, per day |
@@ -53,8 +53,8 @@ More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/DATA_SOURCES.md
 | Pipeline logic (detect, drift, risk, reports) | Unit tested, runs on sample data |
 | Dataset IDs (AFAI, currents, land mask) | Checked against the NOAA servers in October 2026 |
 | Live download | Works. First run 12 October 2026: AFAI 1 day old, currents 2 days old. Response formats pinned by `tests/fixtures/` |
-| Land mask (`etopo180`) | Works, but **coarse**: 1.8 km cells, so Simpson Bay Lagoon counts as land. The download takes about 80 seconds |
-| Detection near land | Pixels that touch land are skipped, since the AFAI product leaves small islands such as Tintamarre unmasked. With the coarse land mask this also skips some real water right against the shore |
+| Land mask | OpenStreetMap coastline in 220 m cells, stored in `regions/land/` (13 October 2026). Simpson Bay Lagoon, Oyster Pond and Pinel are resolved, and the daily run needs no land download (3 seconds instead of 80) |
+| Detection near land | Pixels that touch land are skipped (Tintamarre was flagged as sargassum), and so are pixels next to land the AFAI product masked, where coastal glare looks like algae. Real mats in that first pixel are missed |
 | Wind | **Placeholder:** one constant trade wind from the region file |
 | Risk thresholds | **Uncalibrated** first guesses |
 | Beach coordinates | Approximate, entered by hand |
@@ -77,6 +77,6 @@ Copy `regions/sxm.json`, change the bounding box, map view and beach list, then 
 
 ## License
 
-Code: MIT ([LICENSE](LICENSE)). Data written to `site/data/`: CC BY 4.0. Font: Atkinson Hyperlegible Next, SIL Open Font License 1.1 ([site/fonts/OFL.txt](site/fonts/OFL.txt)). Source data stays under its providers' terms, see [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md).
+Code: MIT ([LICENSE](LICENSE)). Data written to `site/data/`: CC BY 4.0. Font: Atkinson Hyperlegible Next, SIL Open Font License 1.1 ([site/fonts/OFL.txt](site/fonts/OFL.txt)). Land masks in `regions/land/`: ODbL, © OpenStreetMap contributors. Source data stays under its providers' terms, see [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md).
 
 This is an experimental forecast. Do not use it as the only basis for health, safety or navigation decisions.

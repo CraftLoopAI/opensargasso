@@ -25,8 +25,15 @@ def make_velocity(currents: Grid | None, fallback):
     return velocity
 
 
-def make_land_test(land: Grid | None):
-    """Return f(lon, lat) -> bool. Without a land grid nothing is land."""
+def make_land_test(land):
+    """Return f(lon, lat) -> bool.
+
+    `land` is a coastline mask (anything with `is_land`), an elevation Grid
+    where altitude >= 0 is land, or None, in which case nothing is land.
+    """
+    if hasattr(land, "is_land"):
+        return land.is_land
+
     def is_land(lon, lat):
         if land is None:
             return False
