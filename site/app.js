@@ -345,9 +345,8 @@
       var v = d ? d.region.view : { center: [18.065, -63.07], zoom: 12 };
       map.setView(v.center, v.zoom);
     }
-    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 18, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-    }).addTo(map);
+    var tiles = (window.OPENSARGASSO || {}).tiles;  // the basemap is set in config.js
+    if (tiles) L.tileLayer(tiles.url, { maxZoom: tiles.maxZoom || 18, attribution: tiles.attribution }).addTo(map);
     map.createPane("density").style.zIndex = 350;
     state.layers.density = new (makeDensityLayer())({ pane: "density" }).addTo(map);
     ["ashore", "sites", "reports"].forEach(function (k) { state.layers[k] = L.layerGroup().addTo(map); });

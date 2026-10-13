@@ -30,8 +30,9 @@ opensargasso/
 │   ├── index.html, style.css    page and theme (light and dark)
 │   ├── app.js                   three views: beaches (map, outlook board), coastal managers (summary, table, CSV), data and methods
 │   ├── i18n.js                  English, French, Dutch text
-│   ├── config.js                GitHub repo for the report button
+│   ├── config.js                GitHub repo for the report button, basemap tile server
 │   ├── fonts/                   Atkinson Hyperlegible Next (SIL OFL 1.1), self-hosted
+│   ├── vendor/leaflet/          Leaflet 1.9.4 (BSD 2-Clause), served with the site
 │   └── data/
 │       ├── latest.json          today's detections, forecast and beach risk
 │       ├── reports.geojson      approved sightings

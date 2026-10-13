@@ -78,6 +78,6 @@ Copy `regions/sxm.json`, change the bounding box, map view and beach list (with 
 
 ## License
 
-Code: MIT ([LICENSE](LICENSE)). Data written to `site/data/`: CC BY 4.0. Font: Atkinson Hyperlegible Next, SIL Open Font License 1.1 ([site/fonts/OFL.txt](site/fonts/OFL.txt)). Land masks in `regions/land/`: ODbL, © OpenStreetMap contributors. Source data stays under its providers' terms, see [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md).
+Code: MIT ([LICENSE](LICENSE)). Data written to `site/data/`: CC BY 4.0. Font: Atkinson Hyperlegible Next, SIL Open Font License 1.1 ([site/fonts/OFL.txt](site/fonts/OFL.txt)). Map library: Leaflet 1.9.4, BSD 2-Clause ([site/vendor/leaflet/LICENSE](site/vendor/leaflet/LICENSE)). Land masks in `regions/land/`: ODbL, © OpenStreetMap contributors. Source data stays under its providers' terms, see [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md).
 
 This is an experimental forecast. Do not use it as the only basis for health, safety or navigation decisions.
