@@ -86,13 +86,15 @@ def seed_particles(detections, max_particles: int, rng: random.Random, cell_deg:
 
 
 def simulate(seeds, velocity, is_land, bbox, days=7, step_hours=3, windage=0.02,
-             wind=(0.0, 0.0), diffusion_deg=0.02, rng: random.Random | None = None):
+             wind=(0.0, 0.0), diffusion_deg=0.02, rng: random.Random | None = None, velocity_hours=False):
     """Advect particles. Returns one track per seed: [(lon, lat, state)] for day 0..days.
 
-    `wind` is a constant (u, v) or a function f(lon, lat, hours since day 0).
+    `velocity` is f(lon, lat), or f(lon, lat, hours since day 0) with
+    `velocity_hours`; `wind` is a constant (u, v) or f(lon, lat, hours).
     A particle stops when it reaches land (BEACHED) or leaves the box (LEFT).
     """
     rng = rng or random.Random(0)
+    current_at = velocity if velocity_hours else (lambda lon, lat, hours: velocity(lon, lat))
     wind_at = wind if callable(wind) else (lambda lon, lat, hours: wind)
     step_s = step_hours * 3600.0
     steps = max(1, round(24 / step_hours))
@@ -104,8 +106,9 @@ def simulate(seeds, velocity, is_land, bbox, days=7, step_hours=3, windage=0.02,
             for step in range(steps):
                 if state != AFLOAT:
                     break
-                u, v = velocity(lon, lat)
-                wu, wv = wind_at(lon, lat, (day * steps + step) * step_hours)
+                hours = (day * steps + step) * step_hours
+                u, v = current_at(lon, lat, hours)
+                wu, wv = wind_at(lon, lat, hours)
                 u += windage * wu
                 v += windage * wv
                 nlon = lon + u * step_s / (111320.0 * math.cos(math.radians(lat))) + rng.uniform(-1, 1) * diffusion_deg

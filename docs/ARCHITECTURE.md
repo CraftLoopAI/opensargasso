@@ -24,6 +24,7 @@ opensargasso/
 │   ├── sir.py                   NOAA Sargassum Inundation Risk: the beach levels shown
 │   ├── reports.py               GitHub issue -> GeoJSON sighting
 │   ├── sample.py                synthetic inputs for offline runs and tests
+│   ├── calibrate.py             backtest against NOAA SIR (docs/CALIBRATION.md)
 │   └── run.py                   command line entry point, writes site/data
 ├── site/
 │   ├── index.html, style.css    page and theme (light and dark)
