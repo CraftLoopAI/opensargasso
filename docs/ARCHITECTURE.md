@@ -5,7 +5,7 @@
 - **Free to run.** GitHub Actions does the daily job, GitHub Pages hosts the site. No server, no database, no API keys.
 - **No dependencies.** The pipeline uses only the Python standard library. ERDDAP serves grids as CSV, which removes the need for netCDF tooling.
 - **Regions are data.** One JSON file per region holds the bounding box, beaches and tuning values. Expanding means adding files, not code.
-- **Fail visibly, degrade gently.** If the satellite fetch fails, the job fails and the site keeps yesterday's data with its date. If currents or the land mask fail, the forecast still runs and says which fallback it used.
+- **Fail visibly, degrade gently.** If the satellite fetch fails, the job fails and the site keeps yesterday's data with its date. If currents, wind or the land mask fail, the forecast still runs and says which fallback it used.
 
 ## Work tree
 
@@ -45,10 +45,10 @@ opensargasso/
 
 ## Daily flow
 
-1. **Fetch.** `erddap.fetch_grid` requests a bounding box as CSV. It tries latitude ascending, then descending, because ERDDAP rejects the wrong order. The land mask is read from `regions/land/`, so it needs no download; a region without one falls back to ETOPO1 from ERDDAP, cached in `.cache/`.
+1. **Fetch.** `erddap.fetch_grid` requests a bounding box as CSV. It tries latitude ascending, then descending, because ERDDAP rejects the wrong order. The GFS wind is fetched as a 3-hourly series from the satellite date to the end of the newest forecast. The land mask is read from `regions/land/`, so it needs no download; a region without one falls back to ETOPO1 from ERDDAP, cached in `.cache/`.
 2. **Detect.** The box is split into blocks of about 0.75 degrees. Each block's median AFAI is the background. A pixel is flagged when it exceeds the background by the threshold (0.0005 by default), unless its footprint touches land, because the AFAI product leaves small islands and part-land pixels unmasked and land vegetation reads as algae, or it sits next to land the product masked, where coastal glare raises AFAI.
 3. **Seed.** Each flagged pixel becomes one to three particles, capped at 2,500.
-4. **Drift.** Every 3 hours a particle moves with the surface current plus 2 % of the wind, plus a small random step. It stops when it reaches land or leaves the box.
+4. **Drift.** Every 3 hours a particle moves with the surface current plus 2 % of the GFS wind at that hour (the nearest 3-hourly step), plus a small random step. It stops when it reaches land or leaves the box.
 5. **Grade.** For each beach and day, particles within 10 km are counted: 1 or more is Low, 3 or more Moderate, 8 or more High.
 6. **Publish.** `latest.json` is rewritten, a history file is added, the data is committed and the site is deployed.
 
@@ -72,4 +72,5 @@ A visitor opens the issue form, picks a beach and an amount. A maintainer checks
 - Geostrophic currents are coarse (0.2 degrees) and miss nearshore flow, tides and wind-driven surface currents.
 - The 7-day AFAI composite hides day-to-day movement, and clouds leave gaps.
 - The land mask has cells of about 220 m, so the smallest islets and channels can be missed.
+- GFS wind is on a 0.5 degree grid (about 55 km), so wind effects around the island itself are missed.
 - Risk is a particle count, not tonnage, and the thresholds are guesses until calibrated.

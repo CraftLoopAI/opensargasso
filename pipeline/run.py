@@ -24,18 +24,20 @@ def load_region(region_id: str) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def age_days(stamp: str | None, now: dt.datetime):
-    if not stamp or stamp == "sample":
-        return None
+def parse_time(stamp):
     try:
-        when = dt.datetime.fromisoformat(stamp.replace("Z", "+00:00"))
-    except ValueError:
+        return dt.datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+    except (AttributeError, ValueError):
         return None
-    return (now - when).days
+
+
+def age_days(stamp: str | None, now: dt.datetime):
+    when = parse_time(stamp)
+    return None if when is None else (now - when).days
 
 
 def fetch_inputs(region: dict, cache_dir: pathlib.Path, log):
-    """Live inputs. AFAI is required; currents and land degrade gracefully."""
+    """Live inputs. AFAI is required; currents, wind and land degrade gracefully."""
     bbox, notes = region["bbox"], []
     afai = erddap.fetch_grid(sources.AFAI, bbox, stride=region["afai"]["stride"])
     try:
@@ -43,6 +45,12 @@ def fetch_inputs(region: dict, cache_dir: pathlib.Path, log):
     except Exception as e:  # noqa: BLE001 - any failure here has the same fallback
         currents = None
         notes.append(f"currents unavailable ({e}); used the region's fallback current")
+        log(notes[-1])
+    try:  # from day 0 (the satellite date) to the end of the newest forecast
+        wind = erddap.fetch_series(sources.WIND, bbox, start=afai.time)
+    except Exception as e:  # noqa: BLE001
+        wind = None
+        notes.append(f"wind forecast unavailable ({e}); used the region's constant trade wind")
         log(notes[-1])
     land_cache = cache_dir / f"land-{region['id']}.json"
     land = None
@@ -58,7 +66,7 @@ def fetch_inputs(region: dict, cache_dir: pathlib.Path, log):
     except Exception as e:  # noqa: BLE001
         notes.append(f"land mask unavailable ({e}); particles cannot beach")
         log(notes[-1])
-    return afai, currents, land, notes
+    return afai, currents, wind, land, notes
 
 
 def land_source(land) -> dict:
@@ -67,7 +75,14 @@ def land_source(land) -> dict:
     return {"name": sources.LAND["name"], "url": erddap.dataset_page(sources.LAND)}
 
 
-def build(region: dict, afai, currents, land, notes, is_sample: bool, now: dt.datetime) -> dict:
+def wind_source(wind, region: dict) -> dict:
+    if wind:
+        return {"name": sources.WIND["name"], "url": erddap.dataset_page(sources.WIND),
+                "time": wind[0].time, "until": wind[-1].time, "fallback": False}
+    return {"name": "constant trade wind from the region file", "ms": region["drift"]["wind_ms"], "fallback": True}
+
+
+def build(region: dict, afai, currents, land, notes, is_sample: bool, now: dt.datetime, wind=None) -> dict:
     a, d = region["afai"], region["drift"]
     is_land = drift.make_land_test(land)
     cell = abs(afai.dlon)
@@ -78,7 +93,7 @@ def build(region: dict, afai, currents, land, notes, is_sample: bool, now: dt.da
     tracks = drift.simulate(
         seeds, drift.make_velocity(currents, d["fallback_current_ms"]), is_land,
         region["bbox"], days=d["days"], step_hours=d["step_hours"], windage=d["windage"],
-        wind=d["wind_ms"], diffusion_deg=d["diffusion_deg"], rng=rng)
+        wind=drift.make_wind(wind, parse_time(afai.time) or now, d["wind_ms"]), diffusion_deg=d["diffusion_deg"], rng=rng)
     sites = risk.site_risk(tracks, region["sites"], region["risk"], d["days"])
     forecast = [[[round(tr[day][0], 3), round(tr[day][1], 3), tr[day][2]] for tr in tracks if tr[day][2] != drift.LEFT]
                 for day in range(d["days"] + 1)]
@@ -94,7 +109,7 @@ def build(region: dict, afai, currents, land, notes, is_sample: bool, now: dt.da
                          "time": currents.time if currents else None,
                          "age_days": age_days(currents.time, now) if currents else None,
                          "fallback": currents is None},
-            "wind": {"name": "constant trade wind from the region file", "ms": d["wind_ms"]},
+            "wind": wind_source(wind, region),
             "land": {**land_source(land), "available": land is not None},
         },
         "notes": notes,
@@ -136,13 +151,14 @@ def main(argv=None) -> int:
         bbox = region["bbox"]
         afai, currents, land, notes = sample.afai_grid(bbox), sample.currents_grid(bbox), sample.land_grid(bbox), \
             ["synthetic sample data, not an observation"]
+        wind = None
     else:
         try:
-            afai, currents, land, notes = fetch_inputs(region, ROOT / ".cache", log)
+            afai, currents, wind, land, notes = fetch_inputs(region, ROOT / ".cache", log)
         except Exception as e:  # noqa: BLE001
             log(f"AFAI fetch failed, keeping the previous output: {e}")
             return 1
-    result = build(region, afai, currents, land, notes, args.sample, now)
+    result = build(region, afai, currents, land, notes, args.sample, now, wind=wind)
     write_outputs(result, pathlib.Path(args.out), now)
     log(f"{result['stats']['detected']} pixels flagged, {len(result['forecast'][0])} particles, "
         f"AFAI time {result['sources']['afai']['time']}")

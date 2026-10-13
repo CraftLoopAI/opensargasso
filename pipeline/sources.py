@@ -22,6 +22,15 @@ CURRENTS = {
     "verified": True,
 }
 
+WIND = {
+    "name": "NOAA NCEP GFS 10 m wind forecast, 0.5 degree, via NOAA CoastWatch",
+    "base": "https://upwell.pfeg.noaa.gov/erddap",
+    "dataset": "ncep_global_lon180",
+    "variables": ["ugrd10m", "vgrd10m"],
+    "has_time": True,
+    "verified": True,  # 3-hourly analyses, then the newest forecast about 7.5 days ahead
+}
+
 COAST = {
     "name": "OpenStreetMap coastline, 0.002 degree grid",
     "url": "https://www.openstreetmap.org/copyright",

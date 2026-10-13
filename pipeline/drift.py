@@ -1,6 +1,8 @@
 """Particle drift forecast: surface currents plus windage plus random spread."""
 from __future__ import annotations
 
+import bisect
+import datetime as dt
 import math
 import random
 
@@ -23,6 +25,26 @@ def make_velocity(currents: Grid | None, fallback):
                 return u, v
         return fallback[0], fallback[1]
     return velocity
+
+
+def make_wind(series, start: dt.datetime, fallback):
+    """Return f(lon, lat, hours) -> (u, v) in m/s, `hours` after `start`.
+
+    `series` is a list of Grids with ugrd10m and vgrd10m, oldest first; the
+    time step nearest to the requested hour is used. Without a series, or where
+    a value is missing, the region's constant trade wind is used.
+    """
+    if not series:
+        return lambda lon, lat, hours: (fallback[0], fallback[1])
+    offsets = [(dt.datetime.fromisoformat(g.time.replace("Z", "+00:00")) - start).total_seconds() / 3600 for g in series]
+
+    def wind(lon, lat, hours):
+        k = bisect.bisect_left(offsets, hours)
+        if k == len(offsets) or (k > 0 and hours - offsets[k - 1] <= offsets[k] - hours):
+            k -= 1
+        u, v = series[k].value("ugrd10m", lon, lat), series[k].value("vgrd10m", lon, lat)
+        return (u, v) if math.isfinite(u) and math.isfinite(v) else (fallback[0], fallback[1])
+    return wind
 
 
 def make_land_test(land):
@@ -57,24 +79,27 @@ def simulate(seeds, velocity, is_land, bbox, days=7, step_hours=3, windage=0.02,
              wind=(0.0, 0.0), diffusion_deg=0.02, rng: random.Random | None = None):
     """Advect particles. Returns one track per seed: [(lon, lat, state)] for day 0..days.
 
+    `wind` is a constant (u, v) or a function f(lon, lat, hours since day 0).
     A particle stops when it reaches land (BEACHED) or leaves the box (LEFT).
     """
     rng = rng or random.Random(0)
-    dt = step_hours * 3600.0
+    wind_at = wind if callable(wind) else (lambda lon, lat, hours: wind)
+    step_s = step_hours * 3600.0
     steps = max(1, round(24 / step_hours))
     tracks = []
     for lon, lat in seeds:
         state = BEACHED if is_land(lon, lat) else AFLOAT
         track = [(lon, lat, state)]
-        for _ in range(days):
-            for _ in range(steps):
+        for day in range(days):
+            for step in range(steps):
                 if state != AFLOAT:
                     break
                 u, v = velocity(lon, lat)
-                u += windage * wind[0]
-                v += windage * wind[1]
-                nlon = lon + u * dt / (111320.0 * math.cos(math.radians(lat))) + rng.uniform(-1, 1) * diffusion_deg
-                nlat = lat + v * dt / 110540.0 + rng.uniform(-1, 1) * diffusion_deg
+                wu, wv = wind_at(lon, lat, (day * steps + step) * step_hours)
+                u += windage * wu
+                v += windage * wv
+                nlon = lon + u * step_s / (111320.0 * math.cos(math.radians(lat))) + rng.uniform(-1, 1) * diffusion_deg
+                nlat = lat + v * step_s / 110540.0 + rng.uniform(-1, 1) * diffusion_deg
                 if not (bbox["west"] <= nlon <= bbox["east"] and bbox["south"] <= nlat <= bbox["north"]):
                     state = LEFT
                 elif is_land(nlon, nlat):

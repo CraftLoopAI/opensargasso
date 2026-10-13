@@ -50,12 +50,16 @@ class Grid:
 def griddap_url(base, dataset, variables, bbox, time="last", stride=1, descending_lat=False):
     """Build a griddap CSV request for a bounding box.
 
-    `time` is "last", an ISO timestamp, or None for datasets without a time axis.
+    `time` is "last", an ISO timestamp, a (start, step, end) range where end
+    may be "last", or None for datasets without a time axis.
     """
     south, north = bbox["south"], bbox["north"]
     lat = f"[({north}):{stride}:({south})]" if descending_lat else f"[({south}):{stride}:({north})]"
     lon = f"[({bbox['west']}):{stride}:({bbox['east']})]"
-    t = f"[({time})]" if time else ""
+    if isinstance(time, tuple):
+        t = f"[({time[0]}):{time[1]}:({time[2]})]"
+    else:
+        t = f"[({time})]" if time else ""
     query = ",".join(f"{v}{t}{lat}{lon}" for v in variables)
     return f"{base.rstrip('/')}/griddap/{dataset}.csv?" + urllib.parse.quote(query, safe="(),:.-_")
 
@@ -66,7 +70,20 @@ def dataset_page(source: dict) -> str:
 
 
 def parse_csv(text: str, variables) -> Grid:
-    """Parse ERDDAP griddap CSV (a names row, a units row, then data rows)."""
+    """Parse ERDDAP griddap CSV (a names row, a units row, then data rows) for one time step."""
+    return _to_grid(_read_rows(text, variables), variables)
+
+
+def parse_series(text: str, variables) -> list:
+    """Parse a griddap CSV that spans several time steps into one Grid per step, oldest first."""
+    by_time = {}
+    for row in _read_rows(text, variables):
+        by_time.setdefault(row[0], []).append(row)
+    return [_to_grid(by_time[t], variables) for t in sorted(by_time)]
+
+
+def _read_rows(text: str, variables):
+    """Rows of (time or None, lat, lon, [values])."""
     reader = csv.reader(io.StringIO(text))
     header = next(reader)
     next(reader)  # units row
@@ -74,16 +91,16 @@ def parse_csv(text: str, variables) -> Grid:
     for needed in ("latitude", "longitude", *variables):
         if needed not in col:
             raise ValueError(f"column '{needed}' missing from ERDDAP response: {header}")
-    rows, when = [], None
-    for row in reader:
-        if not row:
-            continue
-        if when is None and "time" in col:
-            when = row[col["time"]]
-        rows.append((float(row[col["latitude"]]), float(row[col["longitude"]]),
-                     [_num(row[col[v]]) for v in variables]))
+    rows = [(row[col["time"]] if "time" in col else None, float(row[col["latitude"]]), float(row[col["longitude"]]),
+             [_num(row[col[v]]) for v in variables]) for row in reader if row]
     if not rows:
         raise ValueError("ERDDAP response has no data rows")
+    return rows
+
+
+def _to_grid(rows, variables) -> Grid:
+    when = rows[0][0]
+    rows = [r[1:] for r in rows]
     lats = sorted({r[0] for r in rows})
     lons = sorted({r[1] for r in rows})
     jmap = {v: k for k, v in enumerate(lats)}
@@ -129,13 +146,22 @@ def fetch_grid(source: dict, bbox: dict, stride: int = 1, time="last", fetch=fet
     Latitude can be stored ascending or descending depending on the dataset,
     and ERDDAP rejects a request in the wrong order, so both are tried.
     """
-    t = time if source.get("has_time", True) else None
+    return _request(source, bbox, time if source.get("has_time", True) else None, stride, fetch, parse_csv)
+
+
+def fetch_series(source: dict, bbox: dict, start: str, end: str = "last", time_step: int = 1,
+                 stride: int = 1, fetch=fetch_text) -> list:
+    """Fetch every `time_step`-th time step from `start` to `end` ("last" is the newest). Oldest first."""
+    return _request(source, bbox, (start, time_step, end), stride, fetch, parse_series)
+
+
+def _request(source, bbox, time, stride, fetch, parse):
     error = None
     for descending in (False, True):
         url = griddap_url(source["base"], source["dataset"], source["variables"], bbox,
-                          time=t, stride=stride, descending_lat=descending)
+                          time=time, stride=stride, descending_lat=descending)
         try:
-            return parse_csv(fetch(url), source["variables"])
+            return parse(fetch(url), source["variables"])
         except urllib.error.HTTPError as e:
             error = e
     raise RuntimeError(f"ERDDAP rejected the request for {source['dataset']}: {error}")

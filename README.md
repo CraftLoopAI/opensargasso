@@ -37,7 +37,7 @@ NOAA / USF open data ──> pipeline (Python) ──> site/data/*.json ──> 
 
 | Step | Module | What it does |
 |---|---|---|
-| Fetch | `pipeline/erddap.py`, `sources.py`, `landmask.py` | Downloads the AFAI satellite index and surface currents as CSV, and reads the stored coastline land mask |
+| Fetch | `pipeline/erddap.py`, `sources.py`, `landmask.py` | Downloads the AFAI satellite index, surface currents and the GFS wind forecast as CSV, and reads the stored coastline land mask |
 | Detect | `pipeline/detect.py` | Flags pixels whose AFAI stands out above the local background |
 | Drift | `pipeline/drift.py` | Moves particles with currents and wind for 7 days; they stop at land |
 | Risk | `pipeline/risk.py` | Counts particles within 10 km of each beach, per day |
@@ -55,7 +55,7 @@ More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/DATA_SOURCES.md
 | Live download | Works. First run 12 October 2026: AFAI 1 day old, currents 2 days old. Response formats pinned by `tests/fixtures/` |
 | Land mask | OpenStreetMap coastline in 220 m cells, stored in `regions/land/` (13 October 2026). Simpson Bay Lagoon, Oyster Pond and Pinel are resolved, and the daily run needs no land download (3 seconds instead of 80) |
 | Detection near land | Pixels that touch land are skipped (Tintamarre was flagged as sargassum), and so are pixels next to land the AFAI product masked, where coastal glare looks like algae. Real mats in that first pixel are missed |
-| Wind | **Placeholder:** one constant trade wind from the region file |
+| Wind | NOAA GFS 10 m wind forecast (0.5 degrees, every 3 hours) from the satellite date to the end of the newest forecast, since 13 October 2026. The region's constant trade wind is the fallback |
 | Risk thresholds | **Uncalibrated** first guesses |
 | Beach coordinates | Checked against OpenStreetMap on 13 October 2026. Each beach records the OSM feature its position comes from (`osm`); Cul-de-Sac, Marigot and Oyster Pond have no mapped beach and use the bay or place |
 | Website | Three views (beaches, coastal managers, data and methods), viewed with live tiles in Chromium at desktop and phone width, light and dark, English and French, on 12 October 2026. Not yet checked in Safari, Firefox or on a real phone |

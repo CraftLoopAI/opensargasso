@@ -35,6 +35,8 @@
   function horizon() { return inRange(state.today) ? state.today : 0; }  // first day of "the coming week"
   function shortDay(k) { return fmtDay(k, { weekday: "short", day: "numeric", month: "short" }); }
   function ageText(n) { return n === 1 ? t("dayOld") : t("daysOld", n); }
+  /* Files from before the wind forecast have no `fallback` flag: their wind was the constant one. */
+  function windText(w) { return w && w.fallback === false ? t("windModel", { d: fmtDate(w.until) }) : t("windFallback"); }
   function fmtNum(v) { return v == null ? "?" : Number(v).toLocaleString(state.lang, { maximumFractionDigits: 6 }); }
   function sideName(side) { return (t("side") || {})[side] || side || ""; }
   function bySide(sites) {
@@ -229,7 +231,7 @@
     row(t("dGenerated"), fmtDate(d.generated));
     row(t("dAfai"), fmtDate(s.afai.time) + (s.afai.age_days != null ? " (" + ageText(s.afai.age_days) + ")" : ""));
     row(t("dCurrents"), s.currents.fallback ? t("fallback") : fmtDate(s.currents.time) + (s.currents.age_days != null ? " (" + ageText(s.currents.age_days) + ")" : ""));
-    row(t("dWind"), t("constantWind"));
+    row(t("dWind"), windText(s.wind));
     row(t("dPixels"), d.stats.detected.toLocaleString(state.lang) + " (AFAI > " + d.settings.threshold + ")");
     row(t("dCloud"), Math.round(100 * d.stats.nodata / d.stats.pixels) + " %");
   }
@@ -531,7 +533,8 @@
       [[t("dAfai"), s.afai, fmtDate(s.afai.time) + (s.afai.age_days != null ? " (" + ageText(s.afai.age_days) + ")" : "")],
        [t("dCurrents"), s.currents, s.currents.fallback ? t("fallback") : fmtDate(s.currents.time) + (s.currents.age_days != null ? " (" + ageText(s.currents.age_days) + ")" : "")],
        [t("dLand"), s.land, s.land.available ? "" : t("unavailable")],
-       [t("dWind"), { name: t("constantWind") }, ""]].forEach(function (r) {
+       [t("dWind"), s.wind.fallback === false ? s.wind : { name: t("windFallback") },
+        s.wind.fallback === false ? t("windUntil", { d: fmtDate(s.wind.until) }) : ""]].forEach(function (r) {
         var dd = el("dd");
         if (r[1].url) { var a = el("a", null, r[1].name); a.href = r[1].url; a.rel = "noopener"; dd.appendChild(a); } else dd.appendChild(document.createTextNode(r[1].name));
         if (r[2]) dd.appendChild(el("span", "small", r[2]));
