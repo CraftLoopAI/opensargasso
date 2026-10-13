@@ -226,6 +226,9 @@ code,.code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 /* Leaflet, restyled with the tokens */
 .leaflet-container{font:inherit;background:var(--sea)}
 .leaflet-tile-pane{filter:var(--tiles)}
+/* Leaflet blends tiles with plus-lighter, which draws light lines along tile edges at
+   half-step zooms; overlap them by half a pixel instead so no gap shows either. */
+.leaflet-container img.leaflet-tile{mix-blend-mode:normal;width:256.5px!important;height:256.5px!important}
 .leaflet-density-pane{pointer-events:none}
 #map .leaflet-bar{border:1px solid var(--line);border-radius:10px;box-shadow:none;overflow:hidden}
 #map .leaflet-bar a{background:var(--panel);color:var(--ink);border-bottom-color:var(--line);width:34px;height:34px;line-height:34px}
