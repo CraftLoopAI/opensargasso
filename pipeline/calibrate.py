@@ -131,7 +131,7 @@ def inputs(day: dt.date, region: dict, land, cache: pathlib.Path, pause: float =
             cur = {"lats": cur.lats, "lons": cur.lons, "data": cur.data, "time": cur.time}
         except Exception:  # noqa: BLE001 - the daily job falls back too
             cur = None
-        wind = erddap.fetch_series(sources.WIND, bbox, start=stamp, end=f"{day + dt.timedelta(region['drift']['days']):%Y-%m-%d}T12:00:00Z")
+        _, wind, _ = run.fetch_wind(bbox, stamp, end=f"{day + dt.timedelta(region['drift']['days']):%Y-%m-%d}T12:00:00Z")
         f.write_text(json.dumps({"afai_time": afai.time, "cell": abs(afai.dlon), "stats": stats, "detections": dets, "currents": cur,
                                  "wind": [{"lats": g.lats, "lons": g.lons, "data": g.data, "time": g.time} for g in wind]}))
         time.sleep(pause)

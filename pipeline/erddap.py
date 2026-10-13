@@ -161,12 +161,21 @@ def fetch_series(source: dict, bbox: dict, start: str, end: str = "last", time_s
 
 
 def _request(source, bbox, time, stride, fetch, parse):
+    if source.get("lon360"):  # dataset stores longitude 0 to 360: ask in its terms, answer in +/-180
+        bbox = {**bbox, "west": bbox["west"] % 360, "east": bbox["east"] % 360}
+        if bbox["west"] > bbox["east"]:
+            raise ValueError(f"{source['dataset']}: a box crossing 0 degrees longitude is not supported")
     error = None
     for descending in (False, True):
         url = griddap_url(source["base"], source["dataset"], source["variables"], bbox,
                           time=time, stride=stride, descending_lat=descending)
         try:
-            return parse(fetch(url), source["variables"])
+            result = parse(fetch(url), source["variables"])
         except urllib.error.HTTPError as e:
             error = e
+            continue
+        for g in result if isinstance(result, list) else [result]:
+            if source.get("lon360"):
+                g.lons = [x - 360 if x > 180 else x for x in g.lons]
+        return result
     raise RuntimeError(f"ERDDAP rejected the request for {source['dataset']}: {error}")

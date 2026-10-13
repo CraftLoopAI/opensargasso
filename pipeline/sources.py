@@ -31,6 +31,19 @@ WIND = {
     "verified": True,  # 3-hourly analyses, then the newest forecast about 7.5 days ahead
 }
 
+# The same GFS data on another server, used when the first one is reloading.
+WIND_BACKUP = {
+    "name": "NOAA NCEP GFS 10 m wind forecast, 0.5 degree, via NOAA CoastWatch (backup server)",
+    "base": "https://coastwatch.pfeg.noaa.gov/erddap",
+    "dataset": "NCEP_Global_Best",
+    "variables": ["ugrd10m", "vgrd10m"],
+    "has_time": True,
+    "lon360": True,
+    "verified": True,  # values identical to WIND, checked 13 October 2026
+}
+
+WINDS = [WIND, WIND_BACKUP]  # tried in order
+
 SIR = {
     "name": "NOAA AOML Sargassum Inundation Risk (SIR v1.5), with USF",
     "page": "https://cwcgom.aoml.noaa.gov/SIR/",
