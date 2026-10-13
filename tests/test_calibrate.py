@@ -37,3 +37,22 @@ def test_simulate_can_use_currents_that_change_over_time():
     track = drift.simulate([(-63.0, 18.0)], current, lambda lon, lat: False, BBOX, days=2, windage=0,
                            diffusion_deg=0, velocity_hours=True)[0]
     assert track[1][0] > -63.0 + 0.2 and abs(track[2][0] + 63.0) < 1e-9
+
+
+def test_cached_inputs_redo_detections_when_the_afai_settings_change(tmp_path, monkeypatch):
+    import datetime as dt
+    import json
+    import types
+    from pipeline import erddap, run
+    region = {"bbox": BBOX, "afai": {"stride": 1, "threshold": 0.0005, "background_block_deg": 0.75}, "drift": {"days": 7}}
+    old = {"afai_time": "t", "cell": 0.03, "stats": {}, "detections": [[-63.0, 18.0, 0.001]], "currents": None, "wind": ["kept"]}
+    (tmp_path / "inputs_20260708.json").write_text(json.dumps(old))   # written at stride 2, before settings were recorded
+    fetched = []
+    monkeypatch.setattr(calibrate.erddap, "fetch_grid", lambda *a, **k: fetched.append(k["stride"]) or erddap.Grid(
+        [18.0, 18.015], [-63.0, -62.985], {"AFAI": [[0.0, 0.0], [0.0, 0.0]]}, time="t2"))
+    monkeypatch.setattr(calibrate.detect, "detect", lambda *a, **k: ([(-62.985, 18.015, 0.002)], {"detected": 1}))
+    monkeypatch.setattr(run, "fetch_wind", lambda *a, **k: (_ for _ in ()).throw(AssertionError("wind refetched")))
+    land = types.SimpleNamespace(is_land=lambda lon, lat: False)
+    j = calibrate.inputs(dt.date(2026, 7, 8), region, land, tmp_path, pause=0)
+    assert fetched == [1] and abs(j["cell"] - 0.015) < 1e-9 and j["detections"] == [[-62.985, 18.015, 0.002]] and j["wind"] == ["kept"]
+    assert calibrate.inputs(dt.date(2026, 7, 8), region, land, tmp_path, pause=0) == j and fetched == [1]   # now cached

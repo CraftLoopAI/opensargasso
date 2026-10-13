@@ -48,10 +48,10 @@ opensargasso/
 ## Daily flow
 
 1. **Fetch.** `erddap.fetch_grid` requests a bounding box as CSV. It tries latitude ascending, then descending, because ERDDAP rejects the wrong order. The GFS wind is fetched as a 3-hourly series from the satellite date to the end of the newest forecast, from a second NOAA server when the first is reloading (`run.fetch_wind`). The land mask is read from `regions/land/`, so it needs no download; a region without one falls back to ETOPO1 from ERDDAP, cached in `.cache/`.
-2. **Detect.** The box is split into blocks of about 0.75 degrees. Each block's median AFAI is the background. A pixel is flagged when it exceeds the background by the threshold (0.0005 by default), unless its footprint touches land, because the AFAI product leaves small islands and part-land pixels unmasked and land vegetation reads as algae, or it sits next to land the product masked, where coastal glare raises AFAI.
-3. **Seed.** Each flagged pixel becomes one to three particles, capped at 2,500.
+2. **Detect.** AFAI is read at full resolution (0.015 degrees, about 1.6 km). The box is split into blocks of about 0.75 degrees. Each block's median AFAI is the background. A pixel is flagged when it exceeds the background by the threshold (0.0005 by default), unless its footprint touches land, because the AFAI product leaves small islands and part-land pixels unmasked and land vegetation reads as algae, or it lies within about 3 km (two pixels) of land the product masked, where coastal glare raises AFAI.
+3. **Seed.** Each flagged pixel becomes one to three particles, capped at 10,000. When the cap applies, each particle stands for several seeds and the counts are weighted (`particle_weight`).
 4. **Drift.** Every 3 hours a particle moves with the surface current plus 2 % of the GFS wind at that hour (the nearest 3-hourly step), plus a small random step. It stops when it reaches land or leaves the box.
-5. **Grade.** Each beach takes the latest NOAA SIR level of its nearest coastal segment, for every day of the outlook (a backtest showed this beats the drift forecast; see `CALIBRATION.md`). The drift model also grades each beach from the particles within 50 km, weighted for the particle cap (21 or more is Warning, 24 Medium, 33 High); those levels are kept and fill in where SIR has none.
+5. **Grade.** Each beach takes the latest NOAA SIR level of its nearest coastal segment, for every day of the outlook (a backtest showed this beats the drift forecast; see `CALIBRATION.md`). The drift model also grades each beach from the particles within 50 km, weighted for the particle cap (44 or more is Warning, 107 Medium, 159 High); those levels are kept and fill in where SIR has none.
 6. **Publish.** `latest.json` is rewritten, a history file is added (date, AFAI time, SIR date, detections, each beach's levels and where they came from), the data is committed and the site is deployed. The site works out data ages itself, so they keep counting and it warns if the daily update stops.
 
 ## Output format (`site/data/latest.json`)
@@ -60,9 +60,9 @@ opensargasso/
 |---|---|
 | `generated`, `sample` | Build time (UTC) and whether the inputs were synthetic |
 | `sources` | Data time, age in days and dataset page link for each input, and whether a fallback was used |
-| `settings`, `stats` | Run parameters (threshold, background block, windage, diffusion, step, days, particle cap, risk radius and levels, cell size); pixel counts, including `land` (candidates skipped because they touch land), and `particle_weight` (seeds per drawn particle, used by the map) |
+| `settings`, `stats` | Run parameters (threshold, background block, windage, diffusion, step, days, particle cap, risk radius and levels, cell size); pixel counts, including `land` (candidates skipped because they touch land), and `particle_weight` (seeds per particle, used to weight the counts) |
 | `detections` | `[lon, lat, excess]` per flagged pixel |
-| `forecast` | For each day 0 to 7: `[lon, lat, state]` per particle (0 afloat, 1 beached) |
+| `forecast` | For each day 0 to 7: `[lon, lat, state]` for up to 2,500 of the particles, an even subset (0 afloat, 1 beached) |
 | `sites` | Per beach and day: `risk` shown (0 Low, 1 Warning, 2 Medium, 3 High), the model's `model` levels and `count`, and `source` (`sir` or `model`) |
 
 ## Citizen sightings

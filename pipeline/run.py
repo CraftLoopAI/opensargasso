@@ -15,6 +15,7 @@ import sys
 from . import __version__, detect, drift, erddap, landmask, risk, sample, sir, sources
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
+MAP_PARTICLES = 2500  # particles published for the map; the counts use every simulated particle
 
 
 def load_region(region_id: str) -> dict:
@@ -143,7 +144,8 @@ def build(region: dict, afai, currents, land, notes, is_sample: bool, now: dt.da
         region["bbox"], days=d["days"], step_hours=d["step_hours"], windage=d["windage"],
         wind=drift.make_wind(wind, parse_time(afai.time) or now, d["wind_ms"]), diffusion_deg=d["diffusion_deg"], rng=rng)
     sites = beach_levels(risk.site_risk(tracks, region["sites"], region["risk"], d["days"], weight), sir_levels, d["days"])
-    forecast = [[[round(tr[day][0], 3), round(tr[day][1], 3), tr[day][2]] for tr in tracks if tr[day][2] != drift.LEFT]
+    shown = tracks[::-(-len(tracks) // MAP_PARTICLES)] if tracks else []  # every k-th track, at most MAP_PARTICLES
+    forecast = [[[round(tr[day][0], 3), round(tr[day][1], 3), tr[day][2]] for tr in shown if tr[day][2] != drift.LEFT]
                 for day in range(d["days"] + 1)]
     return {
         "version": __version__,
@@ -211,7 +213,7 @@ def main(argv=None) -> int:
             return 1
     result = build(region, afai, currents, land, notes, args.sample, now, wind=wind, sir_levels=sir_levels, wind_from=wind_from)
     write_outputs(result, pathlib.Path(args.out), now)
-    log(f"{result['stats']['detected']} pixels flagged, {len(result['forecast'][0])} particles, "
+    log(f"{result['stats']['detected']} pixels flagged, {len(result['forecast'][0])} particles on the map, "
         f"AFAI time {result['sources']['afai']['time']}")
     return 0
 

@@ -256,9 +256,13 @@
 
   /* ---------- map ---------- */
 
-  /* Sargassum as a soft density field instead of square cells. Each point adds a
-     blurred disc about one satellite cell wide; the summed coverage is then colored
-     with the sargassum ramp, so neighboring cells merge into mats. */
+  /* Sargassum as a density field. Every satellite cell (or drift particle) adds a
+     Gaussian about one cell wide; the sum is colored with the sargassum ramp. A lone
+     cell draws about its own size, neighbors merge into mats and filaments, and
+     denser areas draw darker. Sums are kept in floats, so there is no banding. */
+  var EDGE = 0.75;  // field value at half a cell from a lone cell's center (with SIGMA)
+  var SIGMA = 0.65; // kernel width in cells: wide enough to join diagonal neighbors
+  var TOP = 3.2;    // field value at the end of the color ramp
   function makeDensityLayer() {
     return L.Layer.extend({
       initialize: function (options) { L.setOptions(this, options); },  // without this the `pane` option is ignored
@@ -268,8 +272,9 @@
         this._draw();
       },
       onRemove: function (map) { L.DomUtil.remove(this._canvas); map.off("moveend resize", this._draw, this); },
-      setData: function (points, cellDeg, ramp) {
-        this._pts = points; this._cell = cellDeg; this._ramp = ramp;
+      // points: [lon, lat, mass] with mass in cells; spread widens the kernel (forecast particles)
+      setData: function (points, cellDeg, ramp, spread) {
+        this._pts = points; this._cell = cellDeg; this._ramp = ramp; this._spread = spread || 1;
         if (this._map) this._draw();
         return this;
       },
@@ -278,38 +283,51 @@
         var ox = Math.round(size.x * pad), oy = Math.round(size.y * pad), w = size.x + 2 * ox, h = size.y + 2 * oy;
         L.DomUtil.setPosition(c, map.containerPointToLayerPoint([-ox, -oy]));
         c.width = w; c.height = h; c.style.width = w + "px"; c.style.height = h + "px";
-        var pts = this._pts || [], ctx = c.getContext("2d", { willReadFrequently: true });
+        var pts = this._pts || [];
         if (!pts.length || !this._ramp || !size.x || !size.y) return;
-        var mid = map.getCenter(), a = map.latLngToContainerPoint(mid), b = map.latLngToContainerPoint([mid.lat, mid.lng + this._cell]);
-        var r = Math.max(4, Math.min(22, Math.abs(b.x - a.x) * 0.42)), stamp = blurStamp(r);
+        // map.project keeps fractions of a pixel; latLngToContainerPoint rounds them, and cells
+        // 5.5 px apart then land 5 and 6 px apart, which shows as a grid in dense mats.
+        var z = map.getZoom(), tl = map.getPixelBounds().min, mid = map.getCenter();
+        var cellPx = map.project([mid.lat, mid.lng + this._cell], z).x - map.project(mid, z).x;
+        var sigma = Math.max(0.7, cellPx * SIGMA * this._spread), r = Math.ceil(3 * sigma), s2 = 2 * sigma * sigma, cut = Math.exp(-r * r / s2);
+        var field = new Float32Array(w * h), gx = new Float32Array(2 * r + 1), gy = new Float32Array(2 * r + 1);
         for (var i = 0; i < pts.length; i++) {
-          var q = map.latLngToContainerPoint([pts[i][1], pts[i][0]]), x = q.x + ox, y = q.y + oy;
-          if (x < -r || y < -r || x > w + r || y > h + r) continue;
-          ctx.globalAlpha = pts[i][2]; ctx.drawImage(stamp, x - r, y - r);
+          var q = map.project([pts[i][1], pts[i][0]], z), fx = q.x - tl.x + ox, fy = q.y - tl.y + oy, x = Math.round(fx), y = Math.round(fy);
+          if (x < -r || y < -r || x >= w + r || y >= h + r) continue;
+          // Sampled at the exact position so cells on a lattice add up evenly, and lowered
+          // to reach zero at the cutoff, where a step would show as a straight edge.
+          for (var k = -r; k <= r; k++) {
+            gx[k + r] = Math.max(0, Math.exp(-(x + k - fx) * (x + k - fx) / s2) - cut);
+            gy[k + r] = pts[i][2] * Math.max(0, Math.exp(-(y + k - fy) * (y + k - fy) / s2) - cut);
+          }
+          var x0 = Math.max(0, x - r), x1 = Math.min(w - 1, x + r), y1 = Math.min(h - 1, y + r);
+          for (var yy = Math.max(0, y - r); yy <= y1; yy++) {
+            var v = gy[yy - y + r], row = yy * w;
+            for (var xx = x0; xx <= x1; xx++) field[row + xx] += v * gx[xx - x + r];
+          }
         }
-        var img = ctx.getImageData(0, 0, w, h), px = img.data, pal = rampPalette(this._ramp);
-        for (var j = 3; j < px.length; j += 4) {
-          var v = px[j];
-          if (v) { var o = v * 4; px[j - 3] = pal[o]; px[j - 2] = pal[o + 1]; px[j - 1] = pal[o + 2]; px[j] = pal[o + 3]; }
+        // The edge fades over a few screen pixels at any zoom, so shapes stay sharp when zoomed in.
+        var band = EDGE * Math.min(0.4, 2.5 / sigma), lo = EDGE - band, hi = EDGE + band;
+        var ctx = c.getContext("2d"), img = ctx.createImageData(w, h), px = img.data, pal = rampPalette(this._ramp);
+        for (var j = 0; j < field.length; j++) {
+          var v = field[j];
+          if (v <= lo) continue;
+          var o = Math.min(255, Math.round(Math.max(v, hi) / TOP * 255)) * 4;
+          px[4 * j] = pal[o]; px[4 * j + 1] = pal[o + 1]; px[4 * j + 2] = pal[o + 2];
+          px[4 * j + 3] = v < hi ? pal[o + 3] * (v - lo) / (hi - lo) : pal[o + 3];
         }
         ctx.putImageData(img, 0, 0);
       }
     });
   }
-  function blurStamp(r) {
-    var s = document.createElement("canvas"), x = s.getContext("2d"), g;
-    s.width = s.height = Math.ceil(2 * r);
-    g = x.createRadialGradient(r, r, 0, r, r, r);
-    g.addColorStop(0, "rgba(0,0,0,1)"); g.addColorStop(0.4, "rgba(0,0,0,.7)"); g.addColorStop(0.75, "rgba(0,0,0,.25)"); g.addColorStop(1, "rgba(0,0,0,0)");
-    x.fillStyle = g; x.fillRect(0, 0, s.width, s.height);
-    return s;
-  }
+  /* Field value to color, light to dark with density: a lone cell peaks at 1, a
+     filament one cell wide at about 1.6, a solid mat at about 2.65. */
   function rampPalette(colors) {
-    var c = document.createElement("canvas"), x = c.getContext("2d"), g;
+    var c = document.createElement("canvas"), x = c.getContext("2d"), grad;
     c.width = 256; c.height = 1;
-    g = x.createLinearGradient(0, 0, 256, 0);
-    [[0, 0, 0], [0.12, 0, 0.65], [0.35, 1, 0.85], [0.75, 2, 0.92], [1, 2, 0.95]].forEach(function (s) { g.addColorStop(s[0], rgba(colors[s[1]], s[2])); });
-    x.fillStyle = g; x.fillRect(0, 0, 256, 1);
+    grad = x.createLinearGradient(0, 0, 256, 0);
+    [[EDGE, 0, 0.75], [1.6, 1, 0.85], [2.3, 2, 0.9], [TOP, 2, 0.9]].forEach(function (s) { grad.addColorStop(s[0] / TOP, rgba(colors[s[1]], s[2])); });
+    x.fillStyle = grad; x.fillRect(0, 0, 256, 1);
     return x.getImageData(0, 0, 256, 1).data;
   }
   function rgba(hex, a) {
@@ -338,25 +356,20 @@
   }
 
   function ramp() { return [css("--clear"), css("--r1"), css("--r2"), css("--r3")]; }
-  function hash(a, b, i) { var x = Math.sin(a * 12.9898 + b * 78.233 + i * 37.719) * 43758.5453; return x - Math.floor(x); }
 
   function drawMap() {
     if (!state.map || !state.data) return;
-    var d = state.data, day = state.day, cell = d.settings.cell_deg, pts;
+    var d = state.data, day = state.day, cell = d.settings.cell_deg, pts, spread = 1;
     if (day === 0) {
-      // Spread each detection the way the pipeline seeds particles (1 to 3 per pixel,
-      // inside the cell), so day 0 and the forecast days share one look.
-      pts = [];
-      d.detections.forEach(function (c) {
-        for (var i = 0, n = 1 + Math.min(2, Math.floor(c[2] / 0.001)); i < n; i++) {
-          pts.push([c[0] + (hash(c[0], c[1], 2 * i) - 0.5) * cell, c[1] + (hash(c[0], c[1], 2 * i + 1) - 0.5) * cell, 0.45]);
-        }
-      });
+      pts = d.detections.map(function (c) { return [c[0], c[1], 1]; });  // each at its cell center
     } else {
-      var heavy = 1 - Math.pow(1 - 0.45, d.stats.particle_weight || 1);  // one particle drawn as `weight` seeds
-      pts = d.forecast[day].filter(function (p) { return p[2] === 0; }).map(function (p) { return [p[0], p[1], heavy]; });
+      // Particles carry the detected area: each stands for n cells. When n > 1 its
+      // kernel is widened so the same area spreads over a larger footprint.
+      var n = d.detections.length / Math.max(1, d.forecast[0].length);
+      spread = Math.sqrt(Math.max(1, n));
+      pts = d.forecast[day].filter(function (p) { return p[2] === 0; }).map(function (p) { return [p[0], p[1], Math.min(1, n)]; });
     }
-    state.layers.density.setData(pts, cell, ramp().slice(1));
+    state.layers.density.setData(pts, cell, ramp().slice(1), spread);
     drawMarkers();
   }
 

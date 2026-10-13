@@ -58,6 +58,7 @@ def test_tintamarre_is_not_flagged():
     plain, _ = detect.detect(afai, threshold=0.0005)
     masked, stats = detect.detect(afai, threshold=0.0005, is_land=drift.make_land_test(land), pixel_deg=0.015)
     assert (-62.975, 18.122) in flagged(plain)
-    # (-62.975, 18.137) is also skipped: it sits beside the one Tintamarre pixel the product did mask.
-    assert flagged(masked) == {(-62.96, 18.122)}
-    assert stats["land"] == 5 and stats["detected"] == 1
+    # The other five lie within glare reach (about 3 km) of land the product masked:
+    # Saint Martin's coast to the west and the one Tintamarre pixel it did mask.
+    assert flagged(masked) == set()
+    assert stats["land"] == 6 and stats["detected"] == 0

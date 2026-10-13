@@ -118,23 +118,29 @@ def sir_levels(day: dt.date, region: dict, cache: pathlib.Path, pause: float = 1
 
 
 def inputs(day: dt.date, region: dict, land, cache: pathlib.Path, pause: float = 1.0):
-    """Detections, currents and the next week's wind for a date, as the daily job would see them."""
+    """Detections, currents and the next week's wind for a date, as the daily job would see them.
+    The detections are redone when the region's AFAI settings change; currents and wind are kept."""
     f = cache / f"inputs_{day:%Y%m%d}.json"
-    if not f.exists():
-        bbox, a = region["bbox"], region["afai"]
-        stamp = f"{day:%Y-%m-%d}T12:00:00Z"
+    j = json.loads(f.read_text()) if f.exists() else {}
+    bbox, a = region["bbox"], region["afai"]
+    stamp = f"{day:%Y-%m-%d}T12:00:00Z"
+    if j.get("afai") == a and "wind" in j:
+        return j
+    if j.get("afai") != a:
         afai = erddap.fetch_grid(sources.AFAI, bbox, stride=a["stride"], time=stamp)
         dets, stats = detect.detect(afai, a["threshold"], a["background_block_deg"],
                                     is_land=land.is_land, pixel_deg=abs(afai.dlon) / a["stride"])
+        j.update(afai=a, afai_time=afai.time, cell=abs(afai.dlon), stats=stats, detections=dets)
+    if "wind" not in j:
         try:
             cur = erddap.fetch_grid(sources.CURRENTS, bbox, time=f"{day:%Y-%m-%d}T00:00:00Z")
             cur = {"lats": cur.lats, "lons": cur.lons, "data": cur.data, "time": cur.time}
         except Exception:  # noqa: BLE001 - the daily job falls back too
             cur = None
         _, wind, _ = run.fetch_wind(bbox, stamp, end=f"{day + dt.timedelta(region['drift']['days']):%Y-%m-%d}T12:00:00Z")
-        f.write_text(json.dumps({"afai_time": afai.time, "cell": abs(afai.dlon), "stats": stats, "detections": dets, "currents": cur,
-                                 "wind": [{"lats": g.lats, "lons": g.lons, "data": g.data, "time": g.time} for g in wind]}))
-        time.sleep(pause)
+        j.update(currents=cur, wind=[{"lats": g.lats, "lons": g.lons, "data": g.data, "time": g.time} for g in wind])
+    f.write_text(json.dumps(j))
+    time.sleep(pause)
     return json.loads(f.read_text())
 
 

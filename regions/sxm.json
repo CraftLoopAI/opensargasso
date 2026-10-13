@@ -6,17 +6,17 @@
   "view": {"center": [18.065, -63.07], "zoom": 12},
   "utc_offset_hours": -4,
   "land_mask": "land/sxm.json",
-  "afai": {"stride": 2, "threshold": 0.0005, "background_block_deg": 0.75},
+  "afai": {"stride": 1, "threshold": 0.0005, "background_block_deg": 0.75},
   "drift": {
     "days": 7,
     "step_hours": 3,
     "windage": 0.02,
     "diffusion_deg": 0.02,
-    "max_particles": 2500,
+    "max_particles": 10000,
     "fallback_current_ms": [-0.25, 0.05],
     "wind_ms": [-6.5, -1.5]
   },
-  "risk": {"radius_km": 50, "low": 21, "moderate": 24, "high": 33},
+  "risk": {"radius_km": 50, "low": 44, "moderate": 107, "high": 159},
   "sites": [
     {"id": "orient-bay", "name": "Orient Bay (Baie Orientale)", "side": "FR", "lat": 18.0868, "lon": -63.0171, "osm": ["w151155089", "w151155090"]},
     {"id": "le-galion", "name": "Le Galion", "side": "FR", "lat": 18.0774, "lon": -63.0166, "osm": ["r9561099"]},

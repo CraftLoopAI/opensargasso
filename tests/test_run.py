@@ -21,6 +21,13 @@ def test_output_has_method_settings_and_source_links(tmp_path):
     assert data["sources"]["land"]["url"].endswith("/griddap/etopo180.html")
 
 
+def test_map_gets_a_subset_of_the_particles(tmp_path, monkeypatch):
+    monkeypatch.setattr(run, "MAP_PARTICLES", 100)
+    assert run.main(["--region", "sxm", "--sample", "--out", str(tmp_path)]) == 0
+    data = json.loads((tmp_path / "latest.json").read_text())
+    assert 50 < len(data["forecast"][0]) <= 100 < data["settings"]["max_particles"]
+
+
 def test_output_has_particle_weight_and_history_records_its_source(tmp_path):
     assert run.main(["--region", "sxm", "--sample", "--out", str(tmp_path)]) == 0
     data = json.loads((tmp_path / "latest.json").read_text())

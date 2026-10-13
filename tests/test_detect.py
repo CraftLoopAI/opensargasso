@@ -25,6 +25,19 @@ def test_pixel_next_to_masked_land_is_skipped():
     assert stats["land"] == 1
 
 
+def test_glare_reach_is_the_same_distance_at_full_resolution():
+    lats = [18 + 0.015 * k for k in range(12)]
+    lons = [-63 + 0.015 * k for k in range(12)]
+    field = [[-0.0003] * 12 for _ in lats]
+    field[5][5] = NAN        # land masked by the product
+    field[5][7] = 0.002      # two pixels out, 3 km: glare
+    field[5][8] = 0.002      # three pixels out: kept
+    g = erddap.Grid(lats, lons, {"AFAI": field})
+    on_gap = lambda lon, lat: math.isclose(lon, g.lons[5]) and math.isclose(lat, g.lats[5])  # noqa: E731
+    found, stats = detect.detect(g, threshold=0.0005, is_land=on_gap, pixel_deg=0.015)
+    assert [round(x, 3) for x, _, _ in found] == [round(g.lons[8], 3)] and stats["land"] == 1
+
+
 def test_pixel_next_to_a_cloud_gap_is_kept():
     found, stats = detect.detect(grid_with_gap(), threshold=0.0005, is_land=lambda lon, lat: False, pixel_deg=0.015)
     assert len(found) == 2 and stats["land"] == 0
