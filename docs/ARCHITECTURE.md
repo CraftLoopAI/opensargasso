@@ -12,9 +12,11 @@
 ```
 opensargasso/
 ├── regions/
-│   └── sxm.json                 region config: bbox, map view, beaches, tuning
+│   ├── sxm.json                 region config: bbox, map view, beaches, tuning, land mask file
+│   └── land/sxm.json            coastline land mask from OpenStreetMap (ODbL), see land/README.md
 ├── pipeline/
 │   ├── erddap.py                ERDDAP CSV client and Grid type
+│   ├── landmask.py              coastline land mask: build from Overpass, load, is_land
 │   ├── sources.py               dataset IDs and their verification status
 │   ├── detect.py                AFAI formula and detection above local background
 │   ├── drift.py                 particle seeding and advection
@@ -43,8 +45,8 @@ opensargasso/
 
 ## Daily flow
 
-1. **Fetch.** `erddap.fetch_grid` requests a bounding box as CSV. It tries latitude ascending, then descending, because ERDDAP rejects the wrong order. The land mask is downloaded once and cached in `.cache/`.
-2. **Detect.** The box is split into blocks of about 0.75 degrees. Each block's median AFAI is the background. A pixel is flagged when it exceeds the background by the threshold (0.0005 by default), unless its footprint touches land: the AFAI product leaves small islands and part-land pixels unmasked, and land vegetation reads as algae.
+1. **Fetch.** `erddap.fetch_grid` requests a bounding box as CSV. It tries latitude ascending, then descending, because ERDDAP rejects the wrong order. The land mask is read from `regions/land/`, so it needs no download; a region without one falls back to ETOPO1 from ERDDAP, cached in `.cache/`.
+2. **Detect.** The box is split into blocks of about 0.75 degrees. Each block's median AFAI is the background. A pixel is flagged when it exceeds the background by the threshold (0.0005 by default), unless its footprint touches land, because the AFAI product leaves small islands and part-land pixels unmasked and land vegetation reads as algae, or it sits next to land the product masked, where coastal glare raises AFAI.
 3. **Seed.** Each flagged pixel becomes one to three particles, capped at 2,500.
 4. **Drift.** Every 3 hours a particle moves with the surface current plus 2 % of the wind, plus a small random step. It stops when it reaches land or leaves the box.
 5. **Grade.** For each beach and day, particles within 10 km are counted: 1 or more is Low, 3 or more Moderate, 8 or more High.
@@ -69,5 +71,5 @@ A visitor opens the issue form, picks a beach and an amount. A maintainer checks
 
 - Geostrophic currents are coarse (0.2 degrees) and miss nearshore flow, tides and wind-driven surface currents.
 - The 7-day AFAI composite hides day-to-day movement, and clouds leave gaps.
-- The land mask is about 1.8 km per cell, so small bays are not resolved, and detection skips some water right against the shore.
+- The land mask has cells of about 220 m, so the smallest islets and channels can be missed.
 - Risk is a particle count, not tonnage, and the thresholds are guesses until calibrated.

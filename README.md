@@ -57,7 +57,7 @@ More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/DATA_SOURCES.md
 | Detection near land | Pixels that touch land are skipped (Tintamarre was flagged as sargassum), and so are pixels next to land the AFAI product masked, where coastal glare looks like algae. Real mats in that first pixel are missed |
 | Wind | **Placeholder:** one constant trade wind from the region file |
 | Risk thresholds | **Uncalibrated** first guesses |
-| Beach coordinates | Approximate, entered by hand |
+| Beach coordinates | Checked against OpenStreetMap on 13 October 2026. Each beach records the OSM feature its position comes from (`osm`); Cul-de-Sac, Marigot and Oyster Pond have no mapped beach and use the bay or place |
 | Website | Three views (beaches, coastal managers, data and methods), viewed with live tiles in Chromium at desktop and phone width, light and dark, English and French, on 12 October 2026. Not yet checked in Safari, Firefox or on a real phone |
 | Translations | French and Dutch text written by the model, not yet reviewed by native speakers |
 
@@ -73,7 +73,7 @@ All three read the same `site/data/` files; switching views needs no extra downl
 
 ## Add a region
 
-Copy `regions/sxm.json`, change the bounding box, map view and beach list, then run `python -m pipeline.run --region <id>`. The Saint Martin box already covers Anguilla, Saint-Barthélemy, Saba, Sint Eustatius and Saint Kitts and Nevis, so those only need beaches added.
+Copy `regions/sxm.json`, change the bounding box, map view and beach list (with the OpenStreetMap feature behind each beach in `osm`), build a land mask with `python -m pipeline.landmask --region <id>`, then run `python -m pipeline.run --region <id>`. The Saint Martin box already covers Anguilla, Saint-Barthélemy, Saba, Sint Eustatius and Saint Kitts and Nevis, so those only need beaches added.
 
 ## License
 

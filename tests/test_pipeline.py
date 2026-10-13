@@ -115,7 +115,7 @@ class ReportsTest(unittest.TestCase):
 
     def test_parse_and_build(self):
         f = reports.to_feature(reports.parse_issue_body(self.body), self.region, 7, "2026-10-11T08:00:00Z")
-        self.assertEqual(f["geometry"]["coordinates"], [-63.018, 18.089])
+        self.assertEqual(f["geometry"]["coordinates"], [-63.0171, 18.0868])
         self.assertEqual(f["properties"]["level"], 3)
         self.assertEqual(f["properties"]["observed"], "2026-10-10")
         self.assertEqual(f["properties"]["note"], "Smell is strong <b>x</b>")

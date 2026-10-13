@@ -5,8 +5,8 @@
 Goal: a forecast local people can trust.
 
 - [x] Run the live pipeline once and fix whatever the real responses break
-- [ ] Confirm the land mask dataset, or replace it with an OpenStreetMap coastline
-- [ ] Check beach coordinates against OpenStreetMap
+- [x] Confirm the land mask dataset, or replace it with an OpenStreetMap coastline
+- [x] Check beach coordinates against OpenStreetMap
 - [ ] Real wind: replace the constant trade wind with a forecast source
 - [ ] Decide on currents: keep geostrophic or move to HYCOM, based on data lag
 - [ ] Calibrate risk thresholds against sightings and NOAA's Sargassum Inundation Risk
