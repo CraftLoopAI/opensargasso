@@ -59,7 +59,7 @@ More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/DATA_SOURCES.md
 | Wind | NOAA GFS 10 m wind forecast (0.5 degrees, every 3 hours) from the satellite date to the end of the newest forecast, since 13 October 2026. If that server is reloading, the same GFS data comes from a second NOAA CoastWatch server; the region's constant trade wind is the last resort |
 | Beach levels | NOAA SIR, latest report carried forward over the week, days 4 to 7 marked less certain (13 October 2026). The drift model's thresholds (50 km: 44, 107, 159, refitted for full resolution) were fitted against SIR and are the fallback. Not yet checked against sightings. See `docs/CALIBRATION.md` |
 | Beach coordinates | Checked against OpenStreetMap on 13 October 2026. Each beach records the OSM feature its position comes from (`osm`); Cul-de-Sac, Marigot and Oyster Pond have no mapped beach and use the bay or place |
-| Website | Three views (beaches, coastal managers, data and methods), viewed with live tiles in Chromium at desktop and phone width, light and dark, English and French, on 12 October 2026. Not yet checked in Safari, Firefox or on a real phone |
+| Website | Three views (beaches, coastal managers, data and methods), viewed with live tiles in Chromium at desktop and phone width, light and dark, English and French, on 12 October 2026. Checked with scripted tests in Firefox 157 and WebKit 27.2 (the engine behind Safari) through Playwright on 13 October 2026: every view, day switching, CSV in English and French, dark theme, phone layout with touch. Not yet checked in Safari itself or on a real phone |
 | Translations | French and Dutch text written by the model, not yet reviewed by native speakers |
 
 ## Site views
