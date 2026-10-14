@@ -4,6 +4,8 @@ The website's sighting form posts here. The Worker checks the Cloudflare Turnsti
 
 Until the relay is set up, the site shows the GitHub issue form button instead.
 
+Run every `npx wrangler` command below in this `worker` folder, where `wrangler.toml` is (from the repository root: `cd worker`). Wrangler reads the Worker's name and settings from that file.
+
 ## Before you start
 
 - **Node.js**, a current or long-term support version, for `npx wrangler`.
@@ -24,7 +26,7 @@ Until the relay is set up, the site shows the GitHub issue form button instead.
    - Expiration: the default is 30 days. Choose the longest the organization allows, and put the expiry date in your calendar (see [Renewing the token](#renewing-the-token)).
 
    If the CraftLoopAI organization requires approval for fine-grained tokens, the token stays pending until an organization owner approves it (organization Settings, Personal access tokens, Pending requests). The account needs write access to the repository, or GitHub drops the `sargassum-report` label from new issues and approving them publishes nothing.
-3. **Deploy**, from this folder:
+3. **Deploy**, in the `worker` folder:
    ```bash
    npx wrangler login                          # opens the browser to sign in to Cloudflare
    npx wrangler secret put GITHUB_TOKEN        # paste the token
@@ -42,14 +44,14 @@ Until the relay is set up, the site shows the GitHub issue form button instead.
 When the token expires, every report fails with "The report could not be sent". Before the expiry date:
 
 1. Create a new token the same way.
-2. From this folder, run `npx wrangler secret put GITHUB_TOKEN` and paste it. It takes effect right away; no new deploy is needed.
+2. In the `worker` folder, run `npx wrangler secret put GITHUB_TOKEN` and paste it. It takes effect right away; no new deploy is needed.
 3. Delete the old token on GitHub.
 
 ## Testing locally
 
 Run the Worker on your computer against a test repository, so test reports do not land in the real one.
 
-1. In this folder, create `.dev.vars` (git ignores it) with test values. These override `wrangler.toml` while testing:
+1. In the `worker` folder, create `.dev.vars` (git ignores it) with test values. These override `wrangler.toml` while testing:
    ```
    REPO=your-name/a-test-repository
    GITHUB_TOKEN=a token for that repository
@@ -57,14 +59,14 @@ Run the Worker on your computer against a test repository, so test reports do no
    ALLOWED_ORIGINS=http://localhost:8000
    ```
    The Turnstile secret above is Cloudflare's test key that always passes.
-2. Run `npx wrangler dev`. The Worker answers at `http://localhost:8787`.
+2. In the `worker` folder, run `npx wrangler dev`. The Worker answers at `http://localhost:8787`.
 3. In another terminal, from the repository root, run `python -m http.server 8000 --directory site`.
 4. In `site/config.js`, set `report.endpoint` to `http://localhost:8787` and `report.turnstileSiteKey` to `1x00000000000000000000AA`, the test site key that always passes. Undo this before committing.
 5. Open `http://localhost:8000`, send a report, and check the test repository's issues.
 
 ## When something goes wrong
 
-Run `npx wrangler tail` in this folder and send a report: it shows each request live, with the reason when GitHub or Turnstile refuses.
+Run `npx wrangler tail` in the `worker` folder and send a report: it shows each request live, with the reason when GitHub or Turnstile refuses.
 
 | What the form says | Likely cause |
 |---|---|
