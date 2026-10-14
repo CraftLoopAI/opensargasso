@@ -2,9 +2,9 @@
 
 Free, open sargassum monitoring for the Caribbean, starting with **Saint-Martin / Sint Maarten**.
 
-It reads open satellite data once a day, flags floating sargassum, forecasts where it drifts over the next 7 days, and shows each beach's level from NOAA's Sargassum Inundation Risk: Low, Warning, Medium or High. The result is a static website in English, French and Dutch. There is no server and no paid service.
+It reads open satellite data once a day, flags floating sargassum, forecasts where it drifts over the next 7 days, and shows each beach's level from NOAA's Sargassum Inundation Risk: Low, Warning, Medium or High. The result is a static website in English, French and Dutch: **https://craftloopai.github.io/opensargasso/**. There is no server and no paid service.
 
-> **Status: experimental.** The pipeline runs end to end on live NOAA data (first run 12 October 2026) and on synthetic sample data, and has unit tests. Beach levels come from NOAA's Sargassum Inundation Risk, which beat our own drift forecast in a backtest ([docs/CALIBRATION.md](docs/CALIBRATION.md)). See [Status](#status).
+> **Status: experimental.** Live since 14 October 2026, updated every day from NOAA data. The pipeline also runs on synthetic sample data and has unit tests. Beach levels come from NOAA's Sargassum Inundation Risk, which beat our own drift forecast in a backtest ([docs/CALIBRATION.md](docs/CALIBRATION.md)). See [Status](#status).
 
 ## Quick start
 
@@ -12,7 +12,7 @@ The pipeline needs only Python 3.11+. The tests need pytest (`pip install pytest
 
 ```bash
 python -m pytest                               # run the tests
-python -m pipeline.run --region sxm --sample   # build the site data from sample inputs
+python -m pipeline.run --region sxm --sample   # build site/data/latest.json from sample inputs (it is not stored in git)
 python -m http.server 8000 --directory site    # open http://localhost:8000
 python -m pipeline.run --region sxm            # live data (needs internet)
 ```
@@ -42,7 +42,7 @@ NOAA / USF open data ──> pipeline (Python) ──> site/data/*.json ──> 
 | Detect | `pipeline/detect.py` | Flags pixels whose AFAI stands out above the local background |
 | Drift | `pipeline/drift.py` | Moves particles with currents and wind for 7 days; they stop at land |
 | Beach levels | `pipeline/sir.py`, `risk.py` | Takes NOAA SIR for the coast nearest each beach; the drift model's particle counts within 50 km are the fallback |
-| Publish | `pipeline/run.py` | Writes `latest.json` and a small daily history file |
+| Publish | `pipeline/run.py` | Writes `latest.json`, deployed with the site, and a small daily history file, committed to the repository |
 | Sightings | `pipeline/reports.py`, `worker/` | The site's form posts to a small Cloudflare Worker that opens a GitHub issue; an approved issue becomes a point in `reports.geojson` |
 
 More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md), [docs/ROADMAP.md](docs/ROADMAP.md).
@@ -54,6 +54,7 @@ More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/DATA_SOURCES.md
 | Pipeline logic (detect, drift, risk, reports) | Unit tested, runs on sample data |
 | Dataset IDs (AFAI, currents, land mask) | Checked against the NOAA servers in October 2026 |
 | Live download | Works. First run 12 October 2026: AFAI 1 day old, currents 2 days old. Response formats pinned by `tests/fixtures/` |
+| Daily update | Runs on GitHub Actions every day at 11:23 UTC since 14 October 2026 and deploys the site to GitHub Pages. Each run commits only the day's small history file; `latest.json` goes to the site, not into git |
 | Land mask | OpenStreetMap coastline in 220 m cells, stored in `regions/land/` (13 October 2026). Simpson Bay Lagoon, Oyster Pond and Pinel are resolved, and the daily run needs no land download (3 seconds instead of 80) |
 | Detection | AFAI at full resolution (0.015 degrees, about 1.6 km) since 13 October 2026. Pixels that touch land are skipped (Tintamarre was flagged as sargassum), and so are pixels within about 3 km of land the AFAI product masked, where coastal glare looks like algae. Real mats that close to the coast are missed |
 | Currents | NOAA AOML geostrophic currents, 1 to 2 days old in October 2026. Kept after a comparison with SMOC total currents via Open-Meteo (13 October 2026); see `docs/DATA_SOURCES.md` |
@@ -61,7 +62,7 @@ More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/DATA_SOURCES.md
 | Beach levels | NOAA SIR, latest report carried forward over the week, days 4 to 7 marked less certain (13 October 2026). The drift model's thresholds (50 km: 44, 107, 159, refitted for full resolution) were fitted against SIR and are the fallback. Not yet checked against sightings. See `docs/CALIBRATION.md` |
 | Beach coordinates | Checked against OpenStreetMap on 13 October 2026. Each beach records the OSM feature its position comes from (`osm`); Cul-de-Sac, Marigot and Oyster Pond have no mapped beach and use the bay or place |
 | Website | Three views (beaches, coastal managers, data and methods), viewed with live tiles in Chromium at desktop and phone width, light and dark, English and French, on 12 October 2026. Checked with scripted tests in Firefox 157 and WebKit 27.2 (the engine behind Safari) through Playwright on 13 October 2026: every view, day switching, CSV in English and French, dark theme, phone layout with touch. Not yet checked in Safari itself or on a real phone |
-| Sighting form | Form on the site that needs no GitHub account (13 October 2026), with a Cloudflare Worker relay and Turnstile spam check in `worker/`. Tested end to end with a local relay and Turnstile's test keys in Chromium, Firefox and WebKit. Not live until the relay is deployed and `site/config.js` names it; until then the site links to the GitHub issue form |
+| Sighting form | Form on the site that needs no GitHub account, live since 14 October 2026, with a Cloudflare Worker relay and Turnstile spam check in `worker/`. A test report from the live site opened the expected GitHub issue (closed without publishing). The GitHub issue form remains for people with an account |
 | Translations | French and Dutch text written by the model, not yet reviewed by native speakers |
 
 ## Site views

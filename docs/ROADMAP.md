@@ -12,7 +12,7 @@ Goal: a forecast local people can trust.
 - [x] Calibrate against NOAA's Sargassum Inundation Risk and test SMOC currents (`docs/CALIBRATION.md`): beach levels now come from SIR, SMOC did not help
 - [ ] Check beach levels against citizen sightings once there are some
 - [ ] Find local partners for sightings and validation (nature foundations, the Réserve Naturelle, hotels, dive shops)
-- [x] Sighting form that does not need a GitHub account (built; live once the relay in `worker/` is deployed)
+- [x] Sighting form that does not need a GitHub account (live since 14 October 2026, relay in `worker/`)
 
 ## Phase 2: neighboring islands
 

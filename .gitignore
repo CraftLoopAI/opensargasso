@@ -12,6 +12,9 @@ env/
 # Download caches (land mask fallback, calibration), rebuilt on demand
 .cache/
 
+# Rebuilt every day and deployed with the site; committing it would add about 0.5 MB a day
+site/data/latest.json
+
 # Editors and operating systems
 .idea/
 .vscode/

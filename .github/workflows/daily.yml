@@ -32,7 +32,7 @@ jobs:
         run: |
           git config user.name "opensargasso-bot"
           git config user.email "opensargasso-bot@users.noreply.github.com"
-          git add site/data
+          git add site/data/history   # latest.json is deployed below, not committed (see .gitignore)
           git diff --cached --quiet || git commit -m "data: daily update"
           git pull --rebase origin main   # a sighting may have been published meanwhile
           git push

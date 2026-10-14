@@ -34,7 +34,7 @@ opensargasso/
 │   ├── fonts/                   Atkinson Hyperlegible Next (SIL OFL 1.1), self-hosted
 │   ├── vendor/leaflet/          Leaflet 1.9.4 (BSD 2-Clause), served with the site
 │   └── data/
-│       ├── latest.json          today's detections, forecast and beach risk
+│       ├── latest.json          today's detections, forecast and beach risk (generated, not in git)
 │       ├── reports.geojson      approved sightings
 │       └── history/             one small file per day plus index.json
 ├── worker/                      sighting relay on Cloudflare: website form -> GitHub issue (README.md)
@@ -54,7 +54,7 @@ opensargasso/
 3. **Seed.** Each flagged pixel becomes one to three particles, capped at 10,000. When the cap applies, each particle stands for several seeds and the counts are weighted (`particle_weight`).
 4. **Drift.** Every 3 hours a particle moves with the surface current plus 2 % of the GFS wind at that hour (the nearest 3-hourly step), plus a small random step. It stops when it reaches land or leaves the box.
 5. **Grade.** Each beach takes the latest NOAA SIR level of its nearest coastal segment, for every day of the outlook (a backtest showed this beats the drift forecast; see `CALIBRATION.md`). The drift model also grades each beach from the particles within 50 km, weighted for the particle cap (44 or more is Warning, 107 Medium, 159 High); those levels are kept and fill in where SIR has none.
-6. **Publish.** `latest.json` is rewritten, a history file is added (date, AFAI time, SIR date, detections, each beach's levels and where they came from), the data is committed and the site is deployed. The site works out data ages itself, so they keep counting and it warns if the daily update stops.
+6. **Publish.** `latest.json` is rewritten and a history file is added (date, AFAI time, SIR date, detections, each beach's levels and where they came from). The history file is committed and the site is deployed to GitHub Pages with `latest.json` in it. `latest.json` itself stays out of git, so the repository does not grow by half a megabyte a day. The site works out data ages itself, so they keep counting and it warns if the daily update stops.
 
 ## Output format (`site/data/latest.json`)
 
