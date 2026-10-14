@@ -7,7 +7,7 @@
 // key. Left empty, the site links to the GitHub issue form instead.
 window.OPENSARGASSO = {
   repo: "CraftLoopAI/opensargasso",
-  report: { endpoint: "", turnstileSiteKey: "" },
+  report: { endpoint: "https://opensargasso-report.craftloopai.workers.dev", turnstileSiteKey: "0x4AAAAAAFWocYzorRDK2VuJ" },
   tiles: {
     url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
