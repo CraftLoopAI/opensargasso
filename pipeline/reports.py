@@ -44,7 +44,7 @@ def to_feature(fields: dict, region: dict, issue_number: int, created: str) -> d
     b = region["bbox"]
     if not (b["south"] <= lat <= b["north"] and b["west"] <= lon <= b["east"]):
         raise ValueError("location is outside the monitored region")
-    note = re.sub(r"\s+", " ", fields.get("note", ""))[:140]
+    note = re.sub(r"\s+", " ", fields.get("note", "").replace("\u200b", ""))[:140]  # the website relay breaks @mentions with U+200B
     # The reporter's day, on the island: an evening report is already tomorrow in UTC.
     filed = local_date(created, region.get("utc_offset_hours", 0))
     observed = fields.get("observed on", "")

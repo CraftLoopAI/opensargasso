@@ -1,0 +1,11 @@
+# Cloudflare Worker that turns website sighting reports into GitHub issues. See README.md.
+name = "opensargasso-report"
+main = "index.js"
+compatibility_date = "2026-10-01"
+
+[vars]
+REPO = "CraftLoopAI/opensargasso"
+# Sites that may send reports: scheme and host only, comma separated. This is GitHub Pages'
+# default address for CraftLoopAI/opensargasso; change it if the site gets its own domain.
+ALLOWED_ORIGINS = "https://craftloopai.github.io"
+# Secrets, set with `npx wrangler secret put <NAME>`: GITHUB_TOKEN, TURNSTILE_SECRET

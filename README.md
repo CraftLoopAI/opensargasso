@@ -26,13 +26,14 @@ On macOS with Python from python.org, run `Install Certificates.command` in the 
 3. In `site/config.js`, set `repo` to your `owner/repo`.
 4. In **Actions**, run **Daily update** once by hand. After that it runs every day at 11:23 UTC.
 5. Create two issue labels: `sargassum-report` and `report-approved`.
+6. Optional: deploy the sighting relay in `worker/` (free Cloudflare account) so visitors can report without a GitHub account. See [worker/README.md](worker/README.md).
 
 ## How it works
 
 ```
 NOAA / USF open data ──> pipeline (Python) ──> site/data/*.json ──> static site (Leaflet)
                               ^
-        approved GitHub issue ┘  (citizen sightings)
+        approved GitHub issue ┘  (citizen sightings, from the issue form or the site's form via worker/)
 ```
 
 | Step | Module | What it does |
@@ -42,7 +43,7 @@ NOAA / USF open data ──> pipeline (Python) ──> site/data/*.json ──> 
 | Drift | `pipeline/drift.py` | Moves particles with currents and wind for 7 days; they stop at land |
 | Beach levels | `pipeline/sir.py`, `risk.py` | Takes NOAA SIR for the coast nearest each beach; the drift model's particle counts within 50 km are the fallback |
 | Publish | `pipeline/run.py` | Writes `latest.json` and a small daily history file |
-| Sightings | `pipeline/reports.py` | Turns an approved issue into a point in `reports.geojson` |
+| Sightings | `pipeline/reports.py`, `worker/` | The site's form posts to a small Cloudflare Worker that opens a GitHub issue; an approved issue becomes a point in `reports.geojson` |
 
 More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md), [docs/ROADMAP.md](docs/ROADMAP.md).
 
@@ -60,6 +61,7 @@ More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/DATA_SOURCES.md
 | Beach levels | NOAA SIR, latest report carried forward over the week, days 4 to 7 marked less certain (13 October 2026). The drift model's thresholds (50 km: 44, 107, 159, refitted for full resolution) were fitted against SIR and are the fallback. Not yet checked against sightings. See `docs/CALIBRATION.md` |
 | Beach coordinates | Checked against OpenStreetMap on 13 October 2026. Each beach records the OSM feature its position comes from (`osm`); Cul-de-Sac, Marigot and Oyster Pond have no mapped beach and use the bay or place |
 | Website | Three views (beaches, coastal managers, data and methods), viewed with live tiles in Chromium at desktop and phone width, light and dark, English and French, on 12 October 2026. Checked with scripted tests in Firefox 157 and WebKit 27.2 (the engine behind Safari) through Playwright on 13 October 2026: every view, day switching, CSV in English and French, dark theme, phone layout with touch. Not yet checked in Safari itself or on a real phone |
+| Sighting form | Form on the site that needs no GitHub account (13 October 2026), with a Cloudflare Worker relay and Turnstile spam check in `worker/`. Tested end to end with a local relay and Turnstile's test keys in Chromium, Firefox and WebKit. Not live until the relay is deployed and `site/config.js` names it; until then the site links to the GitHub issue form |
 | Translations | French and Dutch text written by the model, not yet reviewed by native speakers |
 
 ## Site views

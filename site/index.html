@@ -72,8 +72,24 @@
       <section class="block" aria-labelledby="h-reports">
         <h2 id="h-reports"></h2>
         <ul class="reports" id="reports"></ul>
-        <a class="btn" id="report-btn" target="_blank" rel="noopener"></a>
+        <button class="btn" id="report-open" type="button" aria-expanded="false" aria-controls="report-form" hidden></button>
         <p class="small" id="report-help"></p>
+        <form class="rform" id="report-form" novalidate hidden>
+          <label class="field"><span id="rf-l-beach"></span><select id="rf-beach"></select></label>
+          <div class="rf-where" id="rf-where" hidden>
+            <label class="field"><span id="rf-l-lat"></span><input id="rf-lat" inputmode="decimal" autocomplete="off"></label>
+            <label class="field"><span id="rf-l-lon"></span><input id="rf-lon" inputmode="decimal" autocomplete="off"></label>
+            <button class="link" id="rf-locate" type="button"></button>
+          </div>
+          <fieldset class="field"><legend id="rf-l-amount"></legend><div class="rf-amounts" id="rf-amounts"></div></fieldset>
+          <label class="field"><span id="rf-l-date"></span><input id="rf-date" type="date"></label>
+          <label class="field"><span id="rf-l-note"></span><textarea id="rf-note" rows="2" maxlength="140"></textarea></label>
+          <div id="rf-captcha"></div>
+          <div><button class="btn" id="rf-send" type="submit"></button></div>
+          <p class="small" id="rf-status" role="status" aria-live="polite"></p>
+          <p class="small" id="rf-privacy"></p>
+        </form>
+        <a class="btn" id="report-btn" target="_blank" rel="noopener"></a>
       </section>
       <section class="block" aria-labelledby="h-data">
         <h2 id="h-data"></h2>

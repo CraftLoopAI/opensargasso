@@ -37,6 +37,7 @@ opensargasso/
 │       ├── latest.json          today's detections, forecast and beach risk
 │       ├── reports.geojson      approved sightings
 │       └── history/             one small file per day plus index.json
+├── worker/                      sighting relay on Cloudflare: website form -> GitHub issue (README.md)
 ├── tests/test_pipeline.py       unit tests and an end-to-end sample run
 ├── .github/
 │   ├── workflows/daily.yml      fetch, build, commit data, deploy Pages
@@ -68,7 +69,12 @@ opensargasso/
 
 ## Citizen sightings
 
-A visitor opens the issue form, picks a beach and an amount. A maintainer checks it and adds the label `report-approved`. The workflow validates the report, appends it to `reports.geojson` and closes the issue; a rejected report gets a comment with the reason. An empty date becomes the day of filing on the island (UTC offset in the region file), and dates after filing are rejected. Moderation is built in, and the cost is zero. The trade-off is that reporters need a GitHub account; the roadmap lists a form without that requirement.
+Two ways in, one review:
+
+- **The form on the site**, no account needed. It posts to a small Cloudflare Worker (`worker/`), which checks a Turnstile captcha, validates the fields and opens a GitHub issue in exactly the format the issue form produces, labeled `sargassum-report`. Notes are made one line, without heading marks or @mentions, so a note cannot add fields or notify people. The form appears once `site/config.js` names the relay; until then the site links to the issue form.
+- **The GitHub issue form**, for people with an account.
+
+A maintainer checks the issue and adds the label `report-approved`. The workflow validates the report, appends it to `reports.geojson` and closes the issue; a rejected report gets a comment with the reason. An empty date becomes the day of filing on the island (UTC offset in the region file), and dates after filing are rejected. Moderation is built in. The Worker runs on Cloudflare's free plan; approved reports, including notes, are public.
 
 ## Known limits
 

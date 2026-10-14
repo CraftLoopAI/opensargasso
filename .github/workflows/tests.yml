@@ -10,6 +10,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - uses: actions/setup-node@v4   # for the sighting relay in worker/, and the pytest check against it
+        with:
+          node-version: "22"
       - run: pip install pytest
       - run: python -m pytest -q
+      - run: node --test worker/
       - run: python -m pipeline.run --region sxm --sample --out /tmp/out

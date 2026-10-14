@@ -80,7 +80,7 @@
     $("place").textContent = state.data ? state.data.region.name : "";
     $("tagline").textContent = t("tagline");
     $("h-outlook").textContent = t("outlook"); $("outlook-help").textContent = outlookHelp();
-    $("h-reports").textContent = t("reports"); $("report-btn").textContent = t("reportBtn"); $("report-help").textContent = t("reportHelp");
+    $("h-reports").textContent = t("reports");
     $("h-data").textContent = t("data");
     $("dl-json").textContent = t("json"); $("dl-reports").textContent = t("reportsFile"); $("to-methods").textContent = t("moreMethods");
     Array.prototype.forEach.call($("views").querySelectorAll("a"), function (a) { a.textContent = t("v_" + a.dataset.view); });
@@ -96,6 +96,7 @@
     $("csv-help").textContent = t("csvHelp", { radius: state.data ? fmtNum(state.data.settings.radius_km) : "?" });
     var repo = (window.OPENSARGASSO || {}).repo || "";
     $("report-btn").href = "https://github.com/" + repo + "/issues/new?template=sargassum-report.yml";
+    renderReportForm();
     renderLegend();
   }
 
@@ -233,6 +234,92 @@
         if (p.note) li.appendChild(el("span", "note", p.note));
         li.appendChild(el("span", "small", fmtDate(p.observed)));
         ul.appendChild(li);
+      });
+  }
+
+  /* ---------- sighting form ----------
+     Posts to the relay in worker/, which opens the same GitHub issue as the issue form.
+     Until config.js names the relay, the site links to the GitHub issue form instead. */
+  var form = { widget: undefined, token: "" };
+  function reportConfig() { var r = (window.OPENSARGASSO || {}).report || {}; return r.endpoint && r.turnstileSiteKey ? r : null; }
+  function localIso(d) { return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
+
+  function renderReportForm() {
+    var on = !!reportConfig(), gh = $("report-btn");
+    gh.className = on ? "" : "btn"; gh.textContent = t(on ? "reportGithub" : "reportBtn");
+    $("report-help").textContent = t(on ? "reportHelpForm" : "reportHelp");
+    $("report-open").hidden = !on; $("report-open").textContent = t("reportBtn");
+    if (!on) { $("report-form").hidden = true; return; }
+    [["rf-l-beach", "rfBeach"], ["rf-l-lat", "rfLat"], ["rf-l-lon", "rfLon"], ["rf-locate", "rfLocate"], ["rf-l-amount", "rfAmount"],
+     ["rf-l-date", "rfDate"], ["rf-l-note", "rfNote"], ["rf-send", "rfSend"], ["rf-privacy", "rfPrivacy"]]
+      .forEach(function (x) { $(x[0]).textContent = t(x[1]); });
+    var sel = $("rf-beach"), keep = sel.value; sel.textContent = "";
+    sel.appendChild(el("option", null, t("rfChoose"))).value = "";
+    (state.data ? state.data.sites : []).forEach(function (s) { sel.appendChild(el("option", null, s.name)).value = s.name; });
+    sel.appendChild(el("option", null, t("rfOther"))).value = "Other";
+    sel.value = keep;
+    var box = $("rf-amounts"), picked = box.querySelector("input:checked"); box.textContent = "";
+    t("amounts").forEach(function (name, k) {
+      var lab = el("label"), r = el("input"); r.type = "radio"; r.name = "rf-amount"; r.value = k;
+      if (picked && +picked.value === k) r.checked = true;
+      lab.appendChild(r); lab.appendChild(el("i", k ? "chip-r" + k : "chip-clear")); lab.appendChild(document.createTextNode(name + ", " + t("amountHelp")[k]));
+      box.appendChild(lab);
+    });
+    $("rf-date").max = localIso(new Date());
+  }
+
+  function toggleReport() {
+    var f = $("report-form"), open = f.hidden;
+    f.hidden = !open; $("report-open").setAttribute("aria-expanded", String(open));
+    if (!open) return;
+    if (!$("rf-beach").value && state.sel) { $("rf-beach").value = (state.data.sites.filter(function (s) { return s.id === state.sel; })[0] || {}).name || ""; showWhere(); }
+    loadCaptcha(); $("rf-beach").focus();
+  }
+  function showWhere() { $("rf-where").hidden = $("rf-beach").value !== "Other"; }
+  function reportStatus(msg, bad) { var p = $("rf-status"); p.textContent = msg || ""; p.className = "small" + (bad ? " err" : ""); }
+
+  // Turnstile's script loads only when someone opens the form.
+  function loadCaptcha() {
+    if (form.widget !== undefined) return;
+    form.widget = null;
+    window.onTurnstileLoad = function () {
+      form.widget = window.turnstile.render("#rf-captcha", {
+        sitekey: reportConfig().turnstileSiteKey, language: state.lang, theme: "auto",
+        callback: function (tok) { form.token = tok; },
+        "expired-callback": function () { form.token = ""; }, "error-callback": function () { form.token = ""; }
+      });
+    };
+    var s = document.createElement("script");
+    s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileLoad&render=explicit"; s.async = true;
+    s.onerror = function () { form.widget = undefined; reportStatus(t("rfNoCaptcha"), true); };
+    document.head.appendChild(s);
+  }
+
+  function locate() {
+    if (!navigator.geolocation) { reportStatus(t("rfNoLocation"), true); return; }
+    navigator.geolocation.getCurrentPosition(function (p) {
+      $("rf-lat").value = p.coords.latitude.toFixed(5); $("rf-lon").value = p.coords.longitude.toFixed(5); reportStatus("");
+    }, function () { reportStatus(t("rfNoLocation"), true); }, { enableHighAccuracy: true, timeout: 15000 });
+  }
+
+  function sendReport(e) {
+    e.preventDefault();
+    var amount = $("rf-amounts").querySelector("input:checked"), other = $("rf-beach").value === "Other";
+    var r = { beach: $("rf-beach").value, latitude: other ? $("rf-lat").value.trim() : "", longitude: other ? $("rf-lon").value.trim() : "",
+              amount: amount ? +amount.value : null, observed: $("rf-date").value, note: $("rf-note").value, token: form.token, lang: state.lang };
+    var num = function (v) { return /^-?\d{1,3}([.,]\d{1,10})?$/.test(v); };  // as the relay accepts
+    var problem = !r.beach ? "rfNeedBeach" : other && !(num(r.latitude) && num(r.longitude)) ? "rfNeedPlace" : r.amount === null ? "rfNeedAmount"
+      : r.observed && r.observed > localIso(new Date()) ? "rfFuture" : !r.token ? "rfNeedCaptcha" : "";
+    if (problem) { reportStatus(t(problem), true); return; }
+    $("rf-send").disabled = true; reportStatus(t("rfSending"));
+    fetch(reportConfig().endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(r) })
+      .then(function (res) { return res.json().catch(function () { return {}; }).then(function (j) { return res.ok && j.ok ? "" : j.error || "server"; }); })
+      .catch(function () { return "server"; })
+      .then(function (err) {
+        if (!err) { $("report-form").reset(); showWhere(); reportStatus(t("rfThanks")); }
+        else reportStatus(t(err === "captcha" ? "rfCaptchaFailed" : err === "invalid" ? "rfInvalid" : "rfFailed"), true);
+        $("rf-send").disabled = false; form.token = "";
+        if (window.turnstile && form.widget) window.turnstile.reset(form.widget);
       });
   }
 
@@ -610,6 +697,11 @@
   pickLang(); renderStatic(); renderHeadline(); renderPlay(); renderDocs(); showView();
   window.addEventListener("hashchange", function () { showView(); window.scrollTo(0, 0); });
   $("csv").addEventListener("click", downloadCSV);
+  $("report-open").addEventListener("click", toggleReport);
+  $("rf-beach").addEventListener("change", showWhere);
+  $("rf-locate").addEventListener("click", locate);
+  $("report-form").addEventListener("submit", sendReport);
+  $("report-form").addEventListener("change", function () { if ($("rf-status").className.indexOf("err") > -1) reportStatus(""); });
   $("play").addEventListener("click", play);
   $("days").addEventListener("click", function (e) {
     var b = e.target.closest("button"); if (!b) return;

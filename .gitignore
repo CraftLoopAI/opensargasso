@@ -19,5 +19,9 @@ env/
 .DS_Store
 Thumbs.db
 
-# Local secrets
+# Cloudflare Wrangler state (worker/)
+.wrangler/
+
+# Local secrets (.dev.vars holds the relay's secrets for `wrangler dev`)
 .env
+.dev.vars*
