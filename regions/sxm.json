@@ -16,6 +16,28 @@
     "fallback_current_ms": [-0.25, 0.05],
     "wind_ms": [-6.5, -1.5]
   },
+  "storm_radius_km": 1500,
+  "links": {
+    "bulletins": [
+      {"id": "meteofrance", "url": "https://meteofrance.gp/fr/sargasses/iles-du-nord"},
+      {"id": "sir", "url": "https://cwcgom.aoml.noaa.gov/SIR/"},
+      {"id": "usf", "url": "https://optics.marine.usf.edu/projects/SaWS.html"},
+      {"id": "cermes", "url": "https://sargassum-outlook.web.app"}
+    ],
+    "warnings": [
+      {"side": "FR", "name": "Météo-France Antilles-Guyane", "url": "https://meteofrance.gp/fr/vigilance"},
+      {"side": "NL", "name": "Meteorological Department St. Maarten", "url": "https://www.meteosxm.com/"},
+      {"name": "National Hurricane Center", "url": "https://www.nhc.noaa.gov/gtwo.php?basin=atlc&fdays=7"}
+    ],
+    "health": [
+      {"side": "FR", "name": "ARS Guadeloupe, Saint-Martin et Saint-Barthélemy", "url": "https://www.guadeloupe.ars.sante.fr/informations-sargasses"},
+      {"side": "NL", "name": "Collective Prevention Services (CPS), Sint Maarten", "url": "https://www.sintmaartengov.org/news/Pages/Seasonal-Sargassum-Seaweed-Reaches-Coastal-Areas--CPS-Urges-Community-to-take-Health-Precautions.aspx"}
+    ],
+    "emergency": [
+      {"side": "FR", "numbers": [{"n": "15", "for": "medical"}, {"n": "112", "for": "all"}]},
+      {"side": "NL", "numbers": [{"n": "912", "for": "ambulance"}, {"n": "911", "for": "police"}]}
+    ]
+  },
   "risk": {"radius_km": 50, "low": 44, "moderate": 107, "high": 159},
   "sites": [
     {"id": "orient-bay", "name": "Orient Bay (Baie Orientale)", "side": "FR", "lat": 18.0868, "lon": -63.0171, "osm": ["w151155089", "w151155090"]},

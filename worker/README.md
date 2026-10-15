@@ -56,13 +56,13 @@ Run the Worker on your computer against a test repository, so test reports do no
    REPO=your-name/a-test-repository
    GITHUB_TOKEN=a token for that repository
    TURNSTILE_SECRET=1x0000000000000000000000000000000AA
-   ALLOWED_ORIGINS=http://localhost:8000
+   ALLOWED_ORIGINS=http://127.0.0.1:8000
    ```
    The Turnstile secret above is Cloudflare's test key that always passes.
 2. In the `worker` folder, run `npx wrangler dev`. The Worker answers at `http://localhost:8787`.
-3. In another terminal, from the repository root, run `python -m http.server 8000 --directory site`.
+3. In another terminal, from the repository root, run `python -m pipeline.serve --port 8000` and note the address it prints (if 8000 is taken it uses the next free port; put that address in `ALLOWED_ORIGINS`).
 4. In `site/config.js`, set `report.endpoint` to `http://localhost:8787` and `report.turnstileSiteKey` to `1x00000000000000000000AA`, the test site key that always passes. Undo this before committing.
-5. Open `http://localhost:8000`, send a report, and check the test repository's issues.
+5. Open the address `pipeline.serve` printed, send a report, and check the test repository's issues. `ALLOWED_ORIGINS` must match that address exactly (`127.0.0.1`, not `localhost`, and the same port).
 
 ## When something goes wrong
 

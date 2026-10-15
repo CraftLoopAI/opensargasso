@@ -326,6 +326,84 @@
       });
   }
 
+  /* ---------- health, official bulletins, storm banner ----------
+     Relayed from official sources: texts in i18n.js, links in the region file, plus two daily
+     checks by the pipeline (the newest USF outlook, Atlantic storms near the region). */
+  function regionLinks() { return (state.data && state.data.region.links) || {}; }
+  function linkTo(href, text) { var a = el("a", null, text); a.href = href; a.rel = "noopener"; return a; }
+  function fmtMonth(ym) { var d = new Date(ym + "-01T00:00:00Z"); return isNaN(d) ? ym : d.toLocaleDateString(state.lang, { year: "numeric", month: "long", timeZone: "UTC" }); }
+  function heading(tag, text, id) { var h = el(tag, null, text); if (id) h.id = id; return h; }
+  function linkList(items, note) {
+    var ul = el("ul", "links");
+    items.forEach(function (x) { var li = el("li"); li.appendChild(linkTo(x.url, x.name)); var n = note(x); if (n) li.appendChild(el("span", "small", n)); ul.appendChild(li); });
+    return ul;
+  }
+
+  function renderHealth() {
+    var box = $("health"), L = regionLinks(); box.textContent = "";
+    if (!state.data) return;
+    box.appendChild(heading("h2", t("hHealth"), "h-health"));
+    box.appendChild(el("p", null, t("healthIntro")));
+    var tbl = el("table", "bands"), head = el("tr"), body = el("tbody"), thead = el("thead");
+    head.appendChild(el("th", null, t("healthCol1"))); head.appendChild(el("th", null, t("healthCol2")));
+    thead.appendChild(head); tbl.appendChild(thead);
+    t("healthBands").forEach(function (b, k) {
+      var tr = el("tr", "b" + k), th = el("th", null, b[0]); th.scope = "row";
+      tr.appendChild(th); tr.appendChild(el("td", null, b[1])); body.appendChild(tr);
+    });
+    tbl.appendChild(body); box.appendChild(tbl);
+    box.appendChild(el("p", "small", t("healthVulnerable")));
+    box.appendChild(el("p", "callout", t("healthNoReadings", { place: state.data.region.name })));
+    var tips = el("ul", "tips"); t("healthTips").forEach(function (x) { tips.appendChild(el("li", null, x)); }); box.appendChild(tips);
+    box.appendChild(el("p", null, t("healthSymptoms")));
+    if (L.emergency) {
+      box.appendChild(heading("h3", t("healthEmergency")));
+      var em = el("ul", "links");
+      L.emergency.forEach(function (e) {
+        em.appendChild(el("li", null, sideName(e.side) + ": " + e.numbers.map(function (n) { return n.n + " (" + (t("emergencyFor")[n.for] || n.for) + ")"; }).join(", ")));
+      });
+      box.appendChild(em);
+    }
+    if (L.health) { box.appendChild(heading("h3", t("healthAdvice"))); box.appendChild(linkList(L.health, function (h) { return sideName(h.side); })); }
+    box.appendChild(el("p", "small", t("healthSource")));
+  }
+
+  function renderBulletins(box, headingId) {
+    var L = regionLinks(), d = state.data; box.textContent = "";
+    if (!d) return;
+    box.appendChild(heading("h2", t("hBulletins"), headingId));
+    box.appendChild(el("p", "small", t("bulletinsHelp")));
+    var ul = el("ul", "links");
+    (L.bulletins || []).forEach(function (b) {
+      var li = el("li"); li.appendChild(linkTo(b.url, t("bName")[b.id] || b.id));
+      li.appendChild(el("span", "small", t("bDesc")[b.id] || ""));
+      if (b.id === "sir" && d.sources.sir && d.sources.sir.fallback === false) li.appendChild(el("span", "small", t("bLatest", { d: fmtDate(d.sources.sir.date) })));
+      if (b.id === "usf" && d.context && d.context.usf) {
+        var latest = el("span", "small"); latest.appendChild(linkTo(d.context.usf.url, t("bLatest", { d: fmtMonth(d.context.usf.month) }) + " (PDF)")); li.appendChild(latest);
+      }
+      ul.appendChild(li);
+    });
+    box.appendChild(ul);
+    box.appendChild(heading("h3", t("hWarnings")));
+    box.appendChild(el("p", "small", t("warningsHelp")));
+    box.appendChild(linkList(L.warnings || [], function (w) { return w.side ? sideName(w.side) : ""; }));
+    box.appendChild(el("p", "small", t("notWarning")));
+  }
+
+  // Only from a recent check: an old storm position would mislead more than no banner.
+  function renderStorm() {
+    var box = $("storm"), d = state.data, s = d && d.context && d.context.storms;
+    var near = s && s.active && s.active.length && ageDays(s.checked) <= 1 ? s.active[0] : null;
+    box.hidden = !near; box.textContent = "";
+    if (!near) return;
+    box.appendChild(el("b", null, t("stormBanner", { kind: t("stormKinds")[near.kind] || t("stormKind"), name: near.name,
+      km: fmtNum(near.distance_km), place: d.region.name, when: fmtDate(near.updated || s.checked) })));
+    box.appendChild(document.createTextNode(" " + t("stormFollow") + " "));
+    var warn = (regionLinks().warnings || []).concat([{ name: t("stormTrack"), url: near.url }]);
+    warn.forEach(function (w, i) { if (i) box.appendChild(document.createTextNode(", ")); box.appendChild(linkTo(w.url, w.name + (w.side ? " (" + sideName(w.side) + ")" : ""))); });
+    box.appendChild(document.createTextNode(". " + t("stormTail")));
+  }
+
   function renderData() {
     [$("data"), $("m-data")].forEach(fillData);
   }
@@ -693,6 +771,7 @@
   function renderAll() {
     renderStatic(); renderNotices(); renderHeadline(); renderDays(); renderCaption();
     renderSites(); renderReports(); renderData(); renderPlay(); renderManagers(); renderDocs(); drawMap();
+    renderHealth(); renderBulletins($("bulletins"), "h-bulletins"); renderBulletins($("m-bulletins"), "m-h-bulletins"); renderStorm();
   }
 
   function getJSON(url) { return fetch(url, { cache: "no-cache" }).then(function (r) { if (!r.ok) throw new Error(url + " " + r.status); return r.json(); }); }

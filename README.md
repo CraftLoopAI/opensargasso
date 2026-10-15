@@ -11,11 +11,19 @@ It reads open satellite data once a day, flags floating sargassum, forecasts whe
 The pipeline needs only Python 3.11+. The tests need pytest (`pip install pytest`).
 
 ```bash
-python -m pytest                               # run the tests
-python -m pipeline.run --region sxm --sample   # build site/data/latest.json from sample inputs (it is not stored in git)
-python -m http.server 8000 --directory site    # open http://localhost:8000
-python -m pipeline.run --region sxm            # live data (needs internet)
+python -m pytest                                            # run the tests
+python -m pipeline.run --region sxm --sample --no-history   # build site/data/latest.json from sample inputs
+python -m pipeline.serve --open                             # open the site; it reloads when a file changes
 ```
+
+`pipeline.serve` uses port 8000, or the next free port if that one is taken, and prints the address. The page reloads by itself whenever a file under `site/` changes, including new data, and nothing is cached. Leave it running and, in a second terminal:
+
+```bash
+python -m pipeline.run --region sxm --no-history            # live data (needs internet); the page reloads when it is done
+python -m pipeline.serve --lan                              # also reachable from a phone on the same Wi-Fi
+```
+
+`--no-history` keeps local runs from rewriting the day's history file, which the daily job commits. `site/data/latest.json` itself is not stored in git. The sighting form posts to the live relay, which accepts only the published site; to test it locally, see [worker/README.md](worker/README.md).
 
 On macOS with Python from python.org, run `Install Certificates.command` in the Python folder under Applications once. Otherwise live downloads fail with `CERTIFICATE_VERIFY_FAILED`.
 
@@ -63,6 +71,7 @@ More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/DATA_SOURCES.md
 | Beach coordinates | Checked against OpenStreetMap on 13 October 2026. Each beach records the OSM feature its position comes from (`osm`); Cul-de-Sac, Marigot and Oyster Pond have no mapped beach and use the bay or place |
 | Website | Three views (beaches, coastal managers, data and methods), viewed with live tiles in Chromium at desktop and phone width, light and dark, English and French, on 12 October 2026. Checked with scripted tests in Firefox 157 and WebKit 27.2 (the engine behind Safari) through Playwright on 13 October 2026: every view, day switching, CSV in English and French, dark theme, phone layout with touch. Not yet checked in Safari itself or on a real phone |
 | Sighting form | Form on the site that needs no GitHub account, live since 14 October 2026, with a Cloudflare Worker relay and Turnstile spam check in `worker/`. A test report from the live site opened the expected GitHub issue (closed without publishing). The GitHub issue form remains for people with an account |
+| Health and bulletins | Health and safety panel relaying the French hydrogen sulfide levels (HCSP 2018, updated 2023), advice, emergency numbers and official contacts for both sides, and a panel of official sargassum bulletins and storm warning services; a storm banner appears when NHC reports an Atlantic storm within 1,500 km (15 October 2026). Text written from official sources, not yet reviewed by ARS or CPS |
 | Translations | French and Dutch text written by the model, not yet reviewed by native speakers |
 
 ## Site views

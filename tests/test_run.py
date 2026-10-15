@@ -37,3 +37,9 @@ def test_output_has_particle_weight_and_history_records_its_source(tmp_path):
     assert history["sir_date"] is None                           # sample runs have no SIR
     assert set(history["level_source"].values()) == {"model"}
     assert set(history["level_source"]) == set(history["sites"])
+
+
+def test_preview_run_leaves_the_history_alone(tmp_path):
+    assert run.main(["--region", "sxm", "--sample", "--no-history", "--out", str(tmp_path)]) == 0
+    assert (tmp_path / "latest.json").exists() and (tmp_path / "reports.geojson").exists()
+    assert not (tmp_path / "history").exists()

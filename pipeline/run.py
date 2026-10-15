@@ -2,6 +2,9 @@
 
     python -m pipeline.run --region sxm            # live data
     python -m pipeline.run --region sxm --sample   # synthetic data, no network
+
+Add --no-history for a local preview: it writes only latest.json, not the
+day's history file, which the daily job commits.
 """
 from __future__ import annotations
 
@@ -15,7 +18,7 @@ import sys
 import time
 import urllib.parse
 
-from . import __version__, detect, drift, erddap, landmask, opendap, risk, sample, sir, sources
+from . import __version__, bulletins, detect, drift, erddap, landmask, opendap, risk, sample, sir, sources
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 MAP_PARTICLES = 2500  # particles published for the map; the counts use every simulated particle
@@ -145,6 +148,24 @@ def land_source(land) -> dict:
     return {"name": sources.LAND["name"], "url": erddap.dataset_page(sources.LAND)}
 
 
+def fetch_context(region: dict, now: dt.datetime, log) -> tuple:
+    """(context, notes): the newest USF outlook and nearby Atlantic storms. Failures only leave them out."""
+    context, notes = {"usf": None, "storms": None}, []
+    try:
+        context["usf"] = bulletins.latest_usf(now.date())
+    except Exception as e:  # noqa: BLE001
+        notes.append(f"USF outlook check failed ({e})")
+    radius = region.get("storm_radius_km", bulletins.STORM_RADIUS_KM)
+    try:
+        active = bulletins.nearby_storms(tuple(region["view"]["center"]), radius)
+        context["storms"] = {"checked": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "radius_km": radius, "active": active}
+    except Exception as e:  # noqa: BLE001
+        notes.append(f"NHC storm data unavailable ({e}); no storm banner today")
+    for note in notes:
+        log(note)
+    return context, notes
+
+
 def wind_source(wind, region: dict, wind_from: dict | None = None) -> dict:
     """Where the wind came from; `cached` holds the fetch time when an earlier run's forecast was reused."""
     if wind:
@@ -178,7 +199,7 @@ def beach_levels(model_sites, sir_levels, days: int):
 
 
 def build(region: dict, afai, currents, land, notes, is_sample: bool, now: dt.datetime, wind=None, sir_levels=None,
-          wind_from=None) -> dict:
+          wind_from=None, context=None) -> dict:
     a, d = region["afai"], region["drift"]
     is_land = drift.make_land_test(land)
     cell = abs(afai.dlon)
@@ -198,7 +219,8 @@ def build(region: dict, afai, currents, land, notes, is_sample: bool, now: dt.da
                 for day in range(d["days"] + 1)]
     return {
         "version": __version__,
-        "region": {k: region[k] for k in ("id", "name", "languages", "bbox", "view")},
+        "region": {k: region[k] for k in ("id", "name", "languages", "bbox", "view", "links") if k in region},
+        "context": context or {"usf": None, "storms": None},  # official outlook and nearby storms, for the site
         "generated": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "sample": is_sample,
         "sources": {
@@ -224,9 +246,15 @@ def build(region: dict, afai, currents, land, notes, is_sample: bool, now: dt.da
     }
 
 
-def write_outputs(result: dict, out: pathlib.Path, now: dt.datetime) -> None:
-    (out / "history").mkdir(parents=True, exist_ok=True)
+def write_outputs(result: dict, out: pathlib.Path, now: dt.datetime, history: bool = True) -> None:
+    out.mkdir(parents=True, exist_ok=True)
     (out / "latest.json").write_text(json.dumps(result, separators=(",", ":")), encoding="utf-8")
+    reports = out / "reports.geojson"
+    if not reports.exists():
+        reports.write_text(json.dumps({"type": "FeatureCollection", "features": []}), encoding="utf-8")
+    if not history:  # local preview: leave the committed history alone
+        return
+    (out / "history").mkdir(parents=True, exist_ok=True)
     day = now.strftime("%Y-%m-%d")
     w = result["sources"]["wind"]
     summary = {"date": day, "sample": result["sample"], "afai_time": result["sources"]["afai"]["time"],
@@ -237,9 +265,6 @@ def write_outputs(result: dict, out: pathlib.Path, now: dt.datetime) -> None:
     (out / "history" / f"{day}.json").write_text(json.dumps(summary, separators=(",", ":")), encoding="utf-8")
     dates = sorted(p.stem for p in (out / "history").glob("20*.json"))
     (out / "history" / "index.json").write_text(json.dumps(dates), encoding="utf-8")
-    reports = out / "reports.geojson"
-    if not reports.exists():
-        reports.write_text(json.dumps({"type": "FeatureCollection", "features": []}), encoding="utf-8")
 
 
 def main(argv=None) -> int:
@@ -247,6 +272,7 @@ def main(argv=None) -> int:
     p.add_argument("--region", default="sxm")
     p.add_argument("--out", default=str(ROOT / "site" / "data"))
     p.add_argument("--sample", action="store_true", help="use synthetic inputs, no network")
+    p.add_argument("--no-history", action="store_true", help="write only latest.json (local preview), not the day's history file")
     args = p.parse_args(argv)
     log = lambda m: print(f"[opensargasso] {m}", file=sys.stderr)  # noqa: E731
     region = load_region(args.region)
@@ -255,15 +281,18 @@ def main(argv=None) -> int:
         bbox = region["bbox"]
         afai, currents, land, notes = sample.afai_grid(bbox), sample.currents_grid(bbox), sample.land_grid(bbox), \
             ["synthetic sample data, not an observation"]
-        wind = wind_from = sir_levels = None
+        wind = wind_from = sir_levels = context = None
     else:
         try:
             afai, currents, (wind_from, wind), land, sir_levels, notes = fetch_inputs(region, ROOT / ".cache", log, now.date())
         except Exception as e:  # noqa: BLE001
             log(f"AFAI fetch failed, keeping the previous output: {e}")
             return 1
-    result = build(region, afai, currents, land, notes, args.sample, now, wind=wind, sir_levels=sir_levels, wind_from=wind_from)
-    write_outputs(result, pathlib.Path(args.out), now)
+        context, context_notes = fetch_context(region, now, log)
+        notes += context_notes
+    result = build(region, afai, currents, land, notes, args.sample, now, wind=wind, sir_levels=sir_levels,
+                   wind_from=wind_from, context=context)
+    write_outputs(result, pathlib.Path(args.out), now, history=not args.no_history)
     log(f"{result['stats']['detected']} pixels flagged, {len(result['forecast'][0])} particles on the map, "
         f"AFAI time {result['sources']['afai']['time']}")
     return 0

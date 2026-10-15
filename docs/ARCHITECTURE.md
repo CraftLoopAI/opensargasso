@@ -17,6 +17,7 @@ opensargasso/
 ├── pipeline/
 │   ├── erddap.py                ERDDAP CSV client and Grid type
 │   ├── opendap.py               GFS wind from UCAR's THREDDS server as OPeNDAP text
+│   ├── bulletins.py             newest USF outlook and nearby Atlantic storms (NHC), for the site
 │   ├── landmask.py              coastline land mask: build from Overpass, load, is_land
 │   ├── sources.py               dataset IDs and their verification status
 │   ├── detect.py                AFAI formula and detection above local background
@@ -28,6 +29,7 @@ opensargasso/
 │   ├── calibrate.py             backtest against NOAA SIR (docs/CALIBRATION.md)
 │   ├── probe.py                 one request to each data source, to see which answer from GitHub's runners
 │   ├── rerun.py                 whether the second daily run goes ahead (only if the first had no fresh wind)
+│   ├── serve.py                 local server for development: free port, live reload, no caching
 │   └── run.py                   command line entry point, writes site/data
 ├── site/
 │   ├── index.html, style.css    page and theme (light and dark)
@@ -70,6 +72,8 @@ opensargasso/
 | `detections` | `[lon, lat, excess]` per flagged pixel |
 | `forecast` | For each day 0 to 7: `[lon, lat, state]` for up to 2,500 of the particles, an even subset (0 afloat, 1 beached) |
 | `sites` | Per beach and day: `risk` shown (0 Low, 1 Warning, 2 Medium, 3 High), the model's `model` levels and `count`, and `source` (`sir` or `model`) |
+| `context` | `usf`: the newest USF monthly outlook (`url`, `month`); `storms`: when NHC was checked, the radius, and active Atlantic storms within it (`name`, `kind`, `distance_km`, `updated`, `url`). Either is `null` when its server did not answer |
+| `region.links` | From the region file: official bulletins, storm warning services, health contacts and emergency numbers per side, shown in the health and bulletin panels |
 
 ## Citizen sightings
 

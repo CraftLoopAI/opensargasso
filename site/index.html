@@ -40,6 +40,7 @@
   <div class="notice warn" id="outdated" hidden></div>
   <div class="notice warn" id="stale" hidden></div>
   <div class="notice warn" id="error" hidden></div>
+  <div class="notice storm" id="storm" role="status" hidden></div>
 
   <div class="view" id="view-beaches">
     <section class="intro">
@@ -101,6 +102,11 @@
         </ul>
       </section>
     </div>
+
+    <div class="lower">
+      <section class="block health" id="health" aria-labelledby="h-health"></section>
+      <section class="block" id="bulletins" aria-labelledby="h-bulletins"></section>
+    </div>
   </div>
 
   <div class="view" id="view-managers" hidden>
@@ -124,6 +130,7 @@
       <div class="tbl-wrap"><table class="ew" id="m-table"></table></div>
       <p class="small" id="csv-help"></p>
     </section>
+    <section class="panel" id="m-bulletins" aria-labelledby="m-h-bulletins"></section>
     <section class="block quality" aria-labelledby="m-h-quality">
       <h2 id="m-h-quality"></h2>
       <dl class="data" id="m-data"></dl>
