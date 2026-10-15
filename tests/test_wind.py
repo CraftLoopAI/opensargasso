@@ -2,7 +2,7 @@
 import datetime as dt
 import pathlib
 
-from pipeline import drift, erddap, run, sample, sources
+from pipeline import drift, erddap, opendap, run, sample, sources
 
 FIXTURE = pathlib.Path(__file__).parent / "fixtures" / "wind.csv"
 START = dt.datetime(2026, 10, 12, 12, tzinfo=dt.timezone.utc)
@@ -72,23 +72,31 @@ def test_lon360_source_is_asked_in_0_360_and_answers_in_pm180():
 
 
 def test_pacioos_comes_first_and_is_asked_north_to_south():
-    assert sources.WINDS == [sources.WIND, sources.WIND_MIRROR]
+    assert sources.WINDS == [sources.WIND, sources.WIND_UCAR, sources.WIND_MIRROR]
     assert "pacioos" in sources.WIND["base"] and "pfeg" in sources.WIND_MIRROR["base"]
     asked = []
     erddap.fetch_series(sources.WIND, BBOX, start="2026-10-12T12:00:00Z", fetch=lambda url: asked.append(url) or FIXTURE.read_text())
     assert len(asked) == 1 and "%5B(19.0):1:(17.0)%5D" in asked[0]   # one request, latitude in the stored order
 
 
-def test_fetch_wind_falls_back_to_the_mirror(monkeypatch):
+def test_fetch_wind_tries_ucar_then_the_mirror(monkeypatch):
     def fake(source, bbox, start, end="last", **kw):
         if source is sources.WIND:
             raise erddap.HostBlocked("HTTP 403 from pae-paha.pacioos.hawaii.edu: blocked")
         return series()
 
+    def ucar_down(source, bbox, start, end="last", **kw):
+        raise RuntimeError("down")
+
     monkeypatch.setattr(erddap, "fetch_series", fake)
+    monkeypatch.setattr(opendap, "fetch_wind_series", fake)
     used, got, problems = run.fetch_wind(BBOX, "2026-10-12T12:00:00Z")
-    assert used is sources.WIND_MIRROR and len(got) == 2
-    assert problems == ["ncep_global_lon180 at pae-paha.pacioos.hawaii.edu: HTTP 403 from pae-paha.pacioos.hawaii.edu: blocked"]
+    assert used is sources.WIND_UCAR and len(got) == 2            # the independent source answers
+    monkeypatch.setattr(opendap, "fetch_wind_series", ucar_down)
+    used, got, problems = run.fetch_wind(BBOX, "2026-10-12T12:00:00Z")
+    assert used is sources.WIND_MIRROR
+    assert problems == ["ncep_global_lon180 at pae-paha.pacioos.hawaii.edu: HTTP 403 from pae-paha.pacioos.hawaii.edu: blocked",
+                        "GFS Global_0p5deg Best at thredds.ucar.edu: down"]
 
 
 def test_fetch_wind_gives_each_source_a_time_budget(monkeypatch):
@@ -99,13 +107,14 @@ def test_fetch_wind_gives_each_source_a_time_budget(monkeypatch):
         raise RuntimeError("down")
 
     monkeypatch.setattr(erddap, "fetch_series", down)
+    monkeypatch.setattr(opendap, "fetch_wind_series", down)
     try:
         run.fetch_wind(BBOX, "2026-10-12T12:00:00Z")
     except RuntimeError as e:
-        assert "at pae-paha.pacioos.hawaii.edu: down" in str(e) and "at upwell.pfeg.noaa.gov: down" in str(e)
+        assert all(f"at {host}: down" in str(e) for host in ("pae-paha.pacioos.hawaii.edu", "thredds.ucar.edu", "upwell.pfeg.noaa.gov"))
     else:
         raise AssertionError("expected RuntimeError")
-    assert len(budgets) == 2 and all(b > 0 for b in budgets)
+    assert len(budgets) == 3 and all(b > 0 for b in budgets)
 
 
 def test_output_names_the_mirror_when_it_was_used():

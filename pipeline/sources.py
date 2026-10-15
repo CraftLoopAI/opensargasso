@@ -45,7 +45,18 @@ WIND_MIRROR = {
     "verified": True,
 }
 
-WINDS = [WIND, WIND_MIRROR]  # tried in order
+# Independent of PacIOOS: UCAR decodes GFS itself and serves it as OPeNDAP text (pipeline/opendap.py).
+WIND_UCAR = {
+    "name": "NOAA NCEP GFS 10 m wind forecast, 0.5 degree, via UCAR Unidata THREDDS",
+    "kind": "opendap",
+    "dataset": "GFS Global_0p5deg Best",
+    "url": "https://thredds.ucar.edu/thredds/dodsC/grib/NCEP/GFS/Global_0p5deg/Best",
+    "page": "https://thredds.ucar.edu/thredds/catalog/grib/NCEP/GFS/Global_0p5deg/catalog.html",
+    "variables": ["ugrd10m", "vgrd10m"],
+    "verified": True,  # 3-hourly to about 16 days ahead; checked 15 October 2026
+}
+
+WINDS = [WIND, WIND_UCAR, WIND_MIRROR]  # tried in order; the PacIOOS copy last, as it fails with PacIOOS
 
 SIR = {
     "name": "NOAA AOML Sargassum Inundation Risk (SIR v1.5), with USF",

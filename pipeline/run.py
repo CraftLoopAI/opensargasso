@@ -15,7 +15,7 @@ import sys
 import time
 import urllib.parse
 
-from . import __version__, detect, drift, erddap, landmask, risk, sample, sir, sources
+from . import __version__, detect, drift, erddap, landmask, opendap, risk, sample, sir, sources
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 MAP_PARTICLES = 2500  # particles published for the map; the counts use every simulated particle
@@ -51,18 +51,25 @@ def fetch_wind(bbox: dict, start: str, end: str = "last"):
     problems = []
     for source in sources.WINDS:
         fetch = functools.partial(erddap.fetch_text, deadline=time.monotonic() + WIND_BUDGET_S)
+        get = opendap.fetch_wind_series if source.get("kind") == "opendap" else erddap.fetch_series
         try:
-            return source, erddap.fetch_series(source, bbox, start=start, end=end, fetch=fetch), problems
+            return source, get(source, bbox, start=start, end=end, fetch=fetch), problems
         except Exception as e:  # noqa: BLE001 - try the next server
-            problems.append(f"{source['dataset']} at {urllib.parse.urlsplit(source['base']).netloc}: {e}")
+            host = urllib.parse.urlsplit(source.get("base") or source["url"]).netloc
+            problems.append(f"{source['dataset']} at {host}: {e}")
     raise RuntimeError("; ".join(problems))
+
+
+def source_page(source: dict) -> str:
+    """A page about the dataset, for people."""
+    return source.get("page") or erddap.dataset_page(source)
 
 
 def save_wind(path: pathlib.Path, source: dict, series, now: dt.datetime) -> None:
     """Keep the last good forecast, for a day when every wind source fails."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({
-        "name": source["name"], "url": erddap.dataset_page(source), "fetched": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "name": source["name"], "url": source_page(source), "fetched": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "series": [{"time": g.time, "lats": g.lats, "lons": g.lons, "data": g.data} for g in series]}), encoding="utf-8")
 
 
@@ -142,7 +149,7 @@ def wind_source(wind, region: dict, wind_from: dict | None = None) -> dict:
     """Where the wind came from; `cached` holds the fetch time when an earlier run's forecast was reused."""
     if wind:
         wind_from = wind_from or sources.WIND
-        out = {"name": wind_from["name"], "url": wind_from.get("url") or erddap.dataset_page(wind_from),
+        out = {"name": wind_from["name"], "url": wind_from["url"] if wind_from.get("fetched") else source_page(wind_from),
                "time": wind[0].time, "until": wind[-1].time, "fallback": False}
         if wind_from.get("fetched"):
             out["cached"] = wind_from["fetched"]
