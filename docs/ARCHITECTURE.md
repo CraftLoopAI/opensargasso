@@ -25,6 +25,8 @@ opensargasso/
 │   ├── reports.py               GitHub issue -> GeoJSON sighting
 │   ├── sample.py                synthetic inputs for offline runs and tests
 │   ├── calibrate.py             backtest against NOAA SIR (docs/CALIBRATION.md)
+│   ├── probe.py                 one request to each data source, to see which answer from GitHub's runners
+│   ├── rerun.py                 whether the second daily run goes ahead (only if the first had no fresh wind)
 │   └── run.py                   command line entry point, writes site/data
 ├── site/
 │   ├── index.html, style.css    page and theme (light and dark)
@@ -40,7 +42,8 @@ opensargasso/
 ├── worker/                      sighting relay on Cloudflare: website form -> GitHub issue (README.md)
 ├── tests/test_pipeline.py       unit tests and an end-to-end sample run
 ├── .github/
-│   ├── workflows/daily.yml      fetch, build, commit data, deploy Pages
+│   ├── workflows/daily.yml      fetch, build, commit data, deploy Pages; second run if the wind failed
+│   ├── workflows/probe.yml      run pipeline/probe.py on a GitHub runner, by hand
 │   ├── workflows/tests.yml      tests on every push and pull request
 │   ├── workflows/report.yml     publish a sighting when it is approved
 │   └── ISSUE_TEMPLATE/sargassum-report.yml
@@ -49,7 +52,7 @@ opensargasso/
 
 ## Daily flow
 
-1. **Fetch.** `erddap.fetch_grid` requests a bounding box as CSV. It tries latitude ascending, then descending, because ERDDAP rejects the wrong order. The GFS wind is fetched as a 3-hourly series from the satellite date to the end of the newest forecast, from a second NOAA server when the first is reloading (`run.fetch_wind`). The land mask is read from `regions/land/`, so it needs no download; a region without one falls back to ETOPO1 from ERDDAP, cached in `.cache/`.
+1. **Fetch.** `erddap.fetch_grid` requests a bounding box as CSV, in the latitude order a source records, or ascending then descending when it records none. Timeouts, HTTP 429, 5xx and ERDDAP's "Currently unknown datasetID" (a dataset reloading) are retried after 20, 60 and 120 seconds; a server that answers 403 has blocked the runner and is skipped, and its reason is logged. The GFS wind is fetched as a 3-hourly series from the satellite date to the end of the newest forecast, from PacIOOS and then NOAA PFEG's copy, each within five minutes (`run.fetch_wind`). Each good forecast is kept between runs (Actions cache) and reused when both fail, as long as it covers at least a day; the drift uses the constant trade wind after its end. If the 11:23 UTC run had no fresh forecast, a second run at 15:23 UTC tries again on a new runner (`pipeline/rerun.py`). The land mask is read from `regions/land/`, so it needs no download; a region without one falls back to ETOPO1 from ERDDAP, cached in `.cache/`.
 2. **Detect.** AFAI is read at full resolution (0.015 degrees, about 1.6 km). The box is split into blocks of about 0.75 degrees. Each block's median AFAI is the background. A pixel is flagged when it exceeds the background by the threshold (0.0005 by default), unless its footprint touches land, because the AFAI product leaves small islands and part-land pixels unmasked and land vegetation reads as algae, or it lies within about 3 km (two pixels) of land the product masked, where coastal glare raises AFAI.
 3. **Seed.** Each flagged pixel becomes one to three particles, capped at 10,000. When the cap applies, each particle stands for several seeds and the counts are weighted (`particle_weight`).
 4. **Drift.** Every 3 hours a particle moves with the surface current plus 2 % of the GFS wind at that hour (the nearest 3-hourly step), plus a small random step. It stops when it reaches land or leaves the box.

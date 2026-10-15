@@ -2,6 +2,7 @@ name: Daily update
 on:
   schedule:
     - cron: "23 11 * * *"   # once a day, 11:23 UTC
+    - cron: "23 15 * * *"   # second chance: goes ahead only if the 11:23 run had no fresh wind forecast
   workflow_dispatch:
 permissions:
   contents: write
@@ -22,13 +23,30 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Decide whether to run
+        id: gate
+        env:
+          SCHEDULE: ${{ github.event.schedule }}
+        run: |
+          # A new run usually gets a new runner IP, which often gets past a server that blocked the first one.
+          if [ "$SCHEDULE" = "23 15 * * *" ]; then python -m pipeline.rerun >> "$GITHUB_OUTPUT"; else echo "go=true" >> "$GITHUB_OUTPUT"; fi
+      - name: Restore the last good wind forecast
+        if: steps.gate.outputs.go == 'true'
+        uses: actions/cache@v4   # reused when every wind source fails; saved again after the run
+        with:
+          path: .cache/wind
+          key: wind-sxm-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: wind-sxm-
       - name: Tests
+        if: steps.gate.outputs.go == 'true'
         run: |
           pip install pytest
           python -m pytest -q
       - name: Fetch data and build the forecast
+        if: steps.gate.outputs.go == 'true'
         run: python -m pipeline.run --region sxm --out site/data
       - name: Commit data
+        if: steps.gate.outputs.go == 'true'
         run: |
           git config user.name "opensargasso-bot"
           git config user.email "opensargasso-bot@users.noreply.github.com"
@@ -36,9 +54,12 @@ jobs:
           git diff --cached --quiet || git commit -m "data: daily update"
           git pull --rebase origin main   # a sighting may have been published meanwhile
           git push
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - if: steps.gate.outputs.go == 'true'
+        uses: actions/configure-pages@v5
+      - if: steps.gate.outputs.go == 'true'
+        uses: actions/upload-pages-artifact@v3
         with:
           path: site
       - id: deploy
+        if: steps.gate.outputs.go == 'true'
         uses: actions/deploy-pages@v4

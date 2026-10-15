@@ -7,14 +7,20 @@ from __future__ import annotations
 import csv
 import io
 import math
+import random
 import time as _time
 import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 
-USER_AGENT = "opensargasso/0.1 (open sargassum monitoring)"
+USER_AGENT = "opensargasso/0.1 (+https://github.com/CraftLoopAI/opensargasso)"
 NAN = float("nan")
+RETRY_WAITS = (20, 60, 120)  # seconds before each retry of a timeout, 429 or 5xx (plus jitter)
+
+
+class HostBlocked(RuntimeError):
+    """The server refused this client (HTTP 403), usually an IP block: skip the host for this run."""
 
 
 @dataclass
@@ -121,35 +127,67 @@ def _num(s: str) -> float:
     return x if math.isfinite(x) else NAN
 
 
-def fetch_text(url: str, timeout: int = 180, retries: int = 3, backoff: float = 5.0) -> str:
-    """GET a URL as text. Retries network and 5xx errors; 4xx errors raise at once."""
-    return fetch_bytes(url, timeout, retries, backoff).decode("utf-8", errors="replace")
+def fetch_text(url: str, timeout: int = 90, waits=RETRY_WAITS, deadline: float | None = None, sleep=_time.sleep) -> str:
+    """GET a URL as text; see fetch_bytes."""
+    return fetch_bytes(url, timeout, waits, deadline, sleep).decode("utf-8", errors="replace")
 
 
-def fetch_bytes(url: str, timeout: int = 180, retries: int = 3, backoff: float = 5.0) -> bytes:
-    """GET a URL. Retries network and 5xx errors; 4xx errors raise at once."""
+def fetch_bytes(url: str, timeout: int = 90, waits=RETRY_WAITS, deadline: float | None = None, sleep=_time.sleep) -> bytes:
+    """GET a URL.
+
+    Timeouts, connection errors, HTTP 429 and 5xx are retried after each of
+    `waits` seconds (longer if the server sends Retry-After), but not past
+    `deadline` (a time.monotonic() value), and so is ERDDAP's 404 "Currently
+    unknown datasetID", which it answers while it reloads a dataset. HTTP 403
+    raises HostBlocked and other 4xx errors raise at once. Errors keep the start of the server's answer,
+    which usually says why it refused.
+    """
     last = None
-    for attempt in range(retries):
+    for attempt in range(len(waits) + 1):
         try:
             req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 return resp.read()
         except urllib.error.HTTPError as e:
-            if e.code < 500:
-                raise
-            last = e
+            why = _answer(e)
+            if e.code == 403:
+                raise HostBlocked(f"HTTP 403 from {urllib.parse.urlsplit(url).netloc}: {why}") from None
+            reloading = e.code == 404 and "Currently unknown datasetID" in why
+            if e.code != 429 and e.code < 500 and not reloading:
+                raise urllib.error.HTTPError(e.url, e.code, f"{e.reason} {why}".strip(), e.headers, None) from None
+            last, wait_at_least = f"HTTP {e.code} {why}".strip(), _retry_after(e)
         except (urllib.error.URLError, TimeoutError, OSError) as e:
-            last = e
-        if attempt < retries - 1:
-            _time.sleep(backoff * (attempt + 1))
+            last, wait_at_least = e, 0
+        if attempt == len(waits):
+            break
+        wait = max(waits[attempt], wait_at_least) * random.uniform(1.0, 1.25)
+        if deadline is not None and _time.monotonic() + wait > deadline:
+            break
+        sleep(wait)
     raise RuntimeError(f"could not fetch {url}: {last}")
+
+
+def _answer(e: urllib.error.HTTPError, limit: int = 300) -> str:
+    """The first characters of an error response, on one line."""
+    try:
+        return " ".join(e.read(4096).decode("utf-8", "replace").split())[:limit]
+    except Exception:  # noqa: BLE001 - the status code alone still says something
+        return ""
+
+
+def _retry_after(e: urllib.error.HTTPError) -> float:
+    try:
+        return min(float(e.headers.get("Retry-After", 0)), 300.0)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def fetch_grid(source: dict, bbox: dict, stride: int = 1, time="last", fetch=fetch_text) -> Grid:
     """Fetch one source for a bounding box.
 
     Latitude can be stored ascending or descending depending on the dataset,
-    and ERDDAP rejects a request in the wrong order, so both are tried.
+    and ERDDAP rejects a request in the wrong order: a source that records
+    `lat_descending` is asked in that order only, otherwise both are tried.
     """
     return _request(source, bbox, time if source.get("has_time", True) else None, stride, fetch, parse_csv)
 
@@ -166,7 +204,7 @@ def _request(source, bbox, time, stride, fetch, parse):
         if bbox["west"] > bbox["east"]:
             raise ValueError(f"{source['dataset']}: a box crossing 0 degrees longitude is not supported")
     error = None
-    for descending in (False, True):
+    for descending in [source["lat_descending"]] if "lat_descending" in source else (False, True):
         url = griddap_url(source["base"], source["dataset"], source["variables"], bbox,
                           time=time, stride=stride, descending_lat=descending)
         try:

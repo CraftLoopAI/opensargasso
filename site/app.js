@@ -40,7 +40,10 @@
   function shortDay(k) { return fmtDay(k, { weekday: "short", day: "numeric", month: "short" }); }
   function ageText(n) { return n === 1 ? t("dayOld") : t("daysOld", n); }
   /* Files from before the wind forecast have no `fallback` flag: their wind was the constant one. */
-  function windText(w) { return w && w.fallback === false ? t("windModel", { d: fmtDate(w.until) }) : t("windFallback"); }
+  function windText(w) {
+    if (!w || w.fallback !== false) return t("windFallback");
+    return w.cached ? t("windCached", { d: fmtDate(w.until), f: fmtDate(w.cached) }) : t("windModel", { d: fmtDate(w.until) });  // cached: an earlier run's forecast
+  }
   function fmtNum(v) { return v == null ? "?" : Number(v).toLocaleString(state.lang, { maximumFractionDigits: 6 }); }
   function sideName(side) { return (t("side") || {})[side] || side || ""; }
   function bySide(sites) {
@@ -654,7 +657,7 @@
        [t("dLevels"), s.sir || { name: "NOAA SIR" }, s.sir && s.sir.fallback === false ? t("reportOf", { d: fmtDate(s.sir.date) }) : t("levelsModel")],
        [t("dLand"), s.land, s.land.available ? "" : t("unavailable")],
        [t("dWind"), s.wind.fallback === false ? s.wind : { name: t("windFallback") },
-        s.wind.fallback === false ? t("windUntil", { d: fmtDate(s.wind.until) }) : ""]].forEach(function (r) {
+        s.wind.fallback !== false ? "" : s.wind.cached ? windText(s.wind) : t("windUntil", { d: fmtDate(s.wind.until) })]].forEach(function (r) {
         var dd = el("dd");
         if (r[1].url) { var a = el("a", null, r[1].name); a.href = r[1].url; a.rel = "noopener"; dd.appendChild(a); } else dd.appendChild(document.createTextNode(r[1].name));
         if (r[2]) dd.appendChild(el("span", "small", r[2]));

@@ -22,27 +22,30 @@ CURRENTS = {
     "verified": True,
 }
 
+# GFS 10 m wind. NOAA PFEG's ERDDAP datasets are copies of the PacIOOS one, so
+# PacIOOS comes first and the NOAA copy is a last resort. NOAA's servers refused
+# GitHub's runners (HTTP 403, timeouts) in October 2026 while answering elsewhere.
 WIND = {
-    "name": "NOAA NCEP GFS 10 m wind forecast, 0.5 degree, via NOAA CoastWatch",
+    "name": "NOAA NCEP GFS 10 m wind forecast, 0.5 degree, via PacIOOS (University of Hawaii)",
+    "base": "https://pae-paha.pacioos.hawaii.edu/erddap",
+    "dataset": "ncep_global_lon180",
+    "variables": ["ugrd10m", "vgrd10m"],
+    "has_time": True,
+    "lat_descending": True,
+    "verified": True,  # 3-hourly analyses, then the newest forecast about 7.5 days ahead; checked 14 October 2026
+}
+
+WIND_MIRROR = {
+    "name": "NOAA NCEP GFS 10 m wind forecast, 0.5 degree, via NOAA PFEG (copy of PacIOOS)",
     "base": "https://upwell.pfeg.noaa.gov/erddap",
     "dataset": "ncep_global_lon180",
     "variables": ["ugrd10m", "vgrd10m"],
     "has_time": True,
-    "verified": True,  # 3-hourly analyses, then the newest forecast about 7.5 days ahead
+    "lat_descending": True,
+    "verified": True,
 }
 
-# The same GFS data on another server, used when the first one is reloading.
-WIND_BACKUP = {
-    "name": "NOAA NCEP GFS 10 m wind forecast, 0.5 degree, via NOAA CoastWatch (backup server)",
-    "base": "https://coastwatch.pfeg.noaa.gov/erddap",
-    "dataset": "NCEP_Global_Best",
-    "variables": ["ugrd10m", "vgrd10m"],
-    "has_time": True,
-    "lon360": True,
-    "verified": True,  # values identical to WIND, checked 13 October 2026
-}
-
-WINDS = [WIND, WIND_BACKUP]  # tried in order
+WINDS = [WIND, WIND_MIRROR]  # tried in order
 
 SIR = {
     "name": "NOAA AOML Sargassum Inundation Risk (SIR v1.5), with USF",

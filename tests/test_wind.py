@@ -30,8 +30,10 @@ def test_make_wind_uses_the_nearest_step_and_falls_back():
     wind = drift.make_wind(series(), START, fallback=(-1.0, -2.0))
     assert wind(-63.0, 18.0, 1) == (-6.339717, -0.93475586)     # nearer 12:00
     assert wind(-63.0, 18.0, 2) == (-6.3423977, 0.29091796)     # nearer 15:00
-    assert wind(-63.0, 18.0, 90) == wind(-63.0, 18.0, 3)        # past the forecast: newest step
-    assert wind(-63.0, 18.0, -6) == wind(-63.0, 18.0, 0)        # before it: oldest step
+    assert wind(-63.0, 18.0, 6) == wind(-63.0, 18.0, 3)         # up to 3 hours past the end: newest step
+    assert wind(-63.0, 18.0, -3) == wind(-63.0, 18.0, 0)        # up to 3 hours before: oldest step
+    assert wind(-63.0, 18.0, 7) == (-1.0, -2.0)                 # further out (a reused forecast ends early)
+    assert wind(-63.0, 18.0, -4) == (-1.0, -2.0)
     assert wind(-60.0, 18.0, 0) == (-1.0, -2.0)                 # outside the grid
     assert drift.make_wind(None, START, (-1.0, -2.0))(-63.0, 18.0, 0) == (-1.0, -2.0)
 
@@ -63,40 +65,77 @@ def test_lon360_source_is_asked_in_0_360_and_answers_in_pm180():
         asked.append(url)
         return csv
 
-    source = {**sources.WIND_BACKUP}
+    source = {"base": "https://x.org/erddap", "dataset": "ds360", "variables": ["ugrd10m", "vgrd10m"], "lon360": True}
     s = erddap.fetch_series(source, BBOX, start="2026-10-12T12:00:00Z", fetch=fake)
     assert "%5B(296.0):1:(298.0)%5D" in asked[0]                    # -64..-62 asked as 296..298
     assert s[0].lons == [-63.5, -63.0] and s[0].value("ugrd10m", -63.0, 18.0) == -6.0
 
 
-def test_fetch_wind_falls_back_to_the_backup_server(monkeypatch):
-    def fake(source, bbox, start, end="last"):
+def test_pacioos_comes_first_and_is_asked_north_to_south():
+    assert sources.WINDS == [sources.WIND, sources.WIND_MIRROR]
+    assert "pacioos" in sources.WIND["base"] and "pfeg" in sources.WIND_MIRROR["base"]
+    asked = []
+    erddap.fetch_series(sources.WIND, BBOX, start="2026-10-12T12:00:00Z", fetch=lambda url: asked.append(url) or FIXTURE.read_text())
+    assert len(asked) == 1 and "%5B(19.0):1:(17.0)%5D" in asked[0]   # one request, latitude in the stored order
+
+
+def test_fetch_wind_falls_back_to_the_mirror(monkeypatch):
+    def fake(source, bbox, start, end="last", **kw):
         if source is sources.WIND:
-            raise RuntimeError("Currently unknown datasetID")
+            raise erddap.HostBlocked("HTTP 403 from pae-paha.pacioos.hawaii.edu: blocked")
         return series()
 
     monkeypatch.setattr(erddap, "fetch_series", fake)
     used, got, problems = run.fetch_wind(BBOX, "2026-10-12T12:00:00Z")
-    assert used is sources.WIND_BACKUP and len(got) == 2
-    assert problems == ["ncep_global_lon180: Currently unknown datasetID"]
+    assert used is sources.WIND_MIRROR and len(got) == 2
+    assert problems == ["ncep_global_lon180 at pae-paha.pacioos.hawaii.edu: HTTP 403 from pae-paha.pacioos.hawaii.edu: blocked"]
 
 
-def test_fetch_wind_raises_when_no_server_answers(monkeypatch):
-    def down(source, bbox, start, end="last"):
+def test_fetch_wind_gives_each_source_a_time_budget(monkeypatch):
+    budgets = []
+
+    def down(source, bbox, start, end="last", fetch=None):
+        budgets.append(fetch.keywords["deadline"])
         raise RuntimeError("down")
 
     monkeypatch.setattr(erddap, "fetch_series", down)
     try:
         run.fetch_wind(BBOX, "2026-10-12T12:00:00Z")
     except RuntimeError as e:
-        assert "ncep_global_lon180: down" in str(e) and "NCEP_Global_Best: down" in str(e)
+        assert "at pae-paha.pacioos.hawaii.edu: down" in str(e) and "at upwell.pfeg.noaa.gov: down" in str(e)
     else:
         raise AssertionError("expected RuntimeError")
+    assert len(budgets) == 2 and all(b > 0 for b in budgets)
 
 
-def test_output_names_the_backup_when_it_was_used():
+def test_output_names_the_mirror_when_it_was_used():
     region = run.load_region("sxm")
     bbox, now = region["bbox"], dt.datetime(2026, 10, 13, tzinfo=dt.timezone.utc)
     inputs = (sample.afai_grid(bbox), sample.currents_grid(bbox), sample.land_grid(bbox), [])
-    w = run.build(region, *inputs, False, now, wind=series(), wind_from=sources.WIND_BACKUP)["sources"]["wind"]
-    assert w["url"].endswith("/NCEP_Global_Best.html") and "backup" in w["name"] and w["fallback"] is False
+    w = run.build(region, *inputs, False, now, wind=series(), wind_from=sources.WIND_MIRROR)["sources"]["wind"]
+    assert w["url"].startswith("https://upwell.pfeg.noaa.gov/") and "copy" in w["name"] and w["fallback"] is False
+
+
+def test_a_kept_forecast_is_reused_while_it_covers_a_day(tmp_path):
+    kept = tmp_path / "wind" / "sxm.json"
+    now = dt.datetime(2026, 10, 13, 11, tzinfo=dt.timezone.utc)
+    run.save_wind(kept, sources.WIND, series(), now)                 # series covers 12:00 to 15:00 on 12 October
+    assert run.load_wind(kept, "2026-10-12T12:00:00Z") is None       # 3 hours is less than a day: not worth reusing
+    longer = series()
+    longer[-1].time = "2026-10-14T12:00:00Z"
+    run.save_wind(kept, sources.WIND, longer, now)
+    source, got = run.load_wind(kept, "2026-10-12T12:00:00Z")
+    assert source["fetched"] == "2026-10-13T11:00:00Z" and got[0].value("ugrd10m", -63.0, 18.0) == -6.339717
+    assert run.load_wind(tmp_path / "missing.json", "2026-10-12T12:00:00Z") is None
+
+
+def test_output_and_history_say_when_an_earlier_forecast_was_reused(tmp_path):
+    region = run.load_region("sxm")
+    bbox, now = region["bbox"], dt.datetime(2026, 10, 13, tzinfo=dt.timezone.utc)
+    inputs = (sample.afai_grid(bbox), sample.currents_grid(bbox), sample.land_grid(bbox), [])
+    reused = {"name": sources.WIND["name"], "url": "https://x.org/ds.html", "fetched": "2026-10-12T11:30:00Z"}
+    result = run.build(region, *inputs, False, now, wind=series(), wind_from=reused)
+    assert result["sources"]["wind"]["cached"] == "2026-10-12T11:30:00Z" and result["sources"]["wind"]["fallback"] is False
+    run.write_outputs(result, tmp_path, now)
+    import json
+    assert json.loads((tmp_path / "history" / "2026-10-13.json").read_text())["wind"] == "cached"

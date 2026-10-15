@@ -7,15 +7,19 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import functools
 import json
 import pathlib
 import random
 import sys
+import time
+import urllib.parse
 
 from . import __version__, detect, drift, erddap, landmask, risk, sample, sir, sources
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 MAP_PARTICLES = 2500  # particles published for the map; the counts use every simulated particle
+WIND_BUDGET_S = 300   # per wind source, so a stuck server cannot use up the job's 30 minutes
 
 
 def load_region(region_id: str) -> dict:
@@ -41,14 +45,41 @@ def fetch_wind(bbox: dict, start: str, end: str = "last"):
     """(source, series, problems) from the first wind source in sources.WINDS that answers.
 
     `problems` lists the sources that failed first; raises when none answers.
+    Each source gets WIND_BUDGET_S seconds, retries included; a source that
+    refuses this client (HTTP 403) is skipped at once.
     """
     problems = []
     for source in sources.WINDS:
+        fetch = functools.partial(erddap.fetch_text, deadline=time.monotonic() + WIND_BUDGET_S)
         try:
-            return source, erddap.fetch_series(source, bbox, start=start, end=end), problems
+            return source, erddap.fetch_series(source, bbox, start=start, end=end, fetch=fetch), problems
         except Exception as e:  # noqa: BLE001 - try the next server
-            problems.append(f"{source['dataset']}: {e}")
+            problems.append(f"{source['dataset']} at {urllib.parse.urlsplit(source['base']).netloc}: {e}")
     raise RuntimeError("; ".join(problems))
+
+
+def save_wind(path: pathlib.Path, source: dict, series, now: dt.datetime) -> None:
+    """Keep the last good forecast, for a day when every wind source fails."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({
+        "name": source["name"], "url": erddap.dataset_page(source), "fetched": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "series": [{"time": g.time, "lats": g.lats, "lons": g.lons, "data": g.data} for g in series]}), encoding="utf-8")
+
+
+def load_wind(path: pathlib.Path, start: str):
+    """(source, series) from the kept forecast if it still covers at least a day after `start`, else None.
+
+    The drift uses the constant trade wind for hours past its end (drift.make_wind).
+    """
+    try:
+        kept = json.loads(path.read_text(encoding="utf-8"))
+        series = [erddap.Grid(g["lats"], g["lons"], g["data"], time=g["time"]) for g in kept["series"]]
+        covered = parse_time(series[-1].time) - parse_time(start)
+    except Exception:  # noqa: BLE001 - missing or unreadable: nothing to reuse
+        return None
+    if covered < dt.timedelta(days=1):
+        return None
+    return {"name": kept["name"], "url": kept["url"], "fetched": kept["fetched"]}, series
 
 
 def fetch_inputs(region: dict, cache_dir: pathlib.Path, log, today: dt.date | None = None):
@@ -61,14 +92,21 @@ def fetch_inputs(region: dict, cache_dir: pathlib.Path, log, today: dt.date | No
         currents = None
         notes.append(f"currents unavailable ({e}); used the region's fallback current")
         log(notes[-1])
+    wind_kept = cache_dir / "wind" / f"{region['id']}.json"
     try:  # from day 0 (the satellite date) to the end of the newest forecast
         wind_from, wind, problems = fetch_wind(bbox, afai.time)
         for problem in problems:
-            notes.append(f"wind source unavailable ({problem}); used {wind_from['dataset']}")
+            notes.append(f"wind source unavailable ({problem}); used {wind_from['name']}")
             log(notes[-1])
+        save_wind(wind_kept, wind_from, wind, dt.datetime.now(dt.timezone.utc))
     except Exception as e:  # noqa: BLE001
-        wind_from = wind = None
-        notes.append(f"wind forecast unavailable ({e}); used the region's constant trade wind")
+        kept = load_wind(wind_kept, afai.time)
+        wind_from, wind = kept if kept else (None, None)
+        if kept:
+            notes.append(f"wind forecast unavailable ({e}); reused the forecast fetched {wind_from['fetched']}, "
+                         f"which runs to {wind[-1].time}, with the region's constant trade wind after that")
+        else:
+            notes.append(f"wind forecast unavailable ({e}); used the region's constant trade wind")
         log(notes[-1])
     land_cache = cache_dir / f"land-{region['id']}.json"
     land = None
@@ -101,10 +139,14 @@ def land_source(land) -> dict:
 
 
 def wind_source(wind, region: dict, wind_from: dict | None = None) -> dict:
+    """Where the wind came from; `cached` holds the fetch time when an earlier run's forecast was reused."""
     if wind:
         wind_from = wind_from or sources.WIND
-        return {"name": wind_from["name"], "url": erddap.dataset_page(wind_from),
-                "time": wind[0].time, "until": wind[-1].time, "fallback": False}
+        out = {"name": wind_from["name"], "url": wind_from.get("url") or erddap.dataset_page(wind_from),
+               "time": wind[0].time, "until": wind[-1].time, "fallback": False}
+        if wind_from.get("fetched"):
+            out["cached"] = wind_from["fetched"]
+        return out
     return {"name": "constant trade wind from the region file", "ms": region["drift"]["wind_ms"], "fallback": True}
 
 
@@ -179,7 +221,9 @@ def write_outputs(result: dict, out: pathlib.Path, now: dt.datetime) -> None:
     (out / "history").mkdir(parents=True, exist_ok=True)
     (out / "latest.json").write_text(json.dumps(result, separators=(",", ":")), encoding="utf-8")
     day = now.strftime("%Y-%m-%d")
+    w = result["sources"]["wind"]
     summary = {"date": day, "sample": result["sample"], "afai_time": result["sources"]["afai"]["time"],
+               "wind": "constant" if w.get("fallback") else "cached" if w.get("cached") else "forecast",
                "sir_date": result["sources"].get("sir", {}).get("date"), "detected": result["stats"]["detected"],
                "sites": {s["id"]: s["risk"] for s in result["sites"]},
                "level_source": {s["id"]: s.get("source", "model") for s in result["sites"]}}

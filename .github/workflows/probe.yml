@@ -1,0 +1,17 @@
+name: Probe data sources
+# One small request to each data source from a GitHub runner, to see which servers accept
+# GitHub's shared cloud addresses. Run by hand from the Actions tab; read the log.
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pipeline.probe

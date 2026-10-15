@@ -27,18 +27,24 @@ def make_velocity(currents: Grid | None, fallback):
     return velocity
 
 
+EDGE_HOURS = 3.0  # how far past either end of a wind series its nearest step still counts
+
+
 def make_wind(series, start: dt.datetime, fallback):
     """Return f(lon, lat, hours) -> (u, v) in m/s, `hours` after `start`.
 
     `series` is a list of Grids with ugrd10m and vgrd10m, oldest first; the
-    time step nearest to the requested hour is used. Without a series, or where
-    a value is missing, the region's constant trade wind is used.
+    time step nearest to the requested hour is used. Without a series, more
+    than EDGE_HOURS before or after it (a reused older forecast ends early), or
+    where a value is missing, the region's constant trade wind is used.
     """
     if not series:
         return lambda lon, lat, hours: (fallback[0], fallback[1])
     offsets = [(dt.datetime.fromisoformat(g.time.replace("Z", "+00:00")) - start).total_seconds() / 3600 for g in series]
 
     def wind(lon, lat, hours):
+        if not offsets[0] - EDGE_HOURS <= hours <= offsets[-1] + EDGE_HOURS:
+            return (fallback[0], fallback[1])
         k = bisect.bisect_left(offsets, hours)
         if k == len(offsets) or (k > 0 and hours - offsets[k - 1] <= offsets[k] - hours):
             k -= 1
