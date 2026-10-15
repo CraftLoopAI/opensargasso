@@ -43,3 +43,23 @@ def test_preview_run_leaves_the_history_alone(tmp_path):
     assert run.main(["--region", "sxm", "--sample", "--no-history", "--out", str(tmp_path)]) == 0
     assert (tmp_path / "latest.json").exists() and (tmp_path / "reports.geojson").exists()
     assert not (tmp_path / "history").exists()
+
+
+def test_cloud_share_counts_empty_sea_near_the_island_only():
+    from pipeline import erddap
+    nan = float("nan")
+    lats, lons = [18.0, 18.5, 19.0, 25.0], [-63.5, -63.0, -62.5]
+    field = [[1.0, nan, 1.0],       # one gap at 18.0 N, 63.0 W
+             [1.0, 1.0, nan],       # one gap, but that cell is land: not counted
+             [nan, 1.0, 1.0],       # one gap
+             [nan, nan, nan]]       # far away: ignored
+    grid = erddap.Grid(lats, lons, {"AFAI": field})
+    is_land = lambda lon, lat: (lon, lat) == (-62.5, 18.5)  # noqa: E731
+    near = run.cloud_share_near(grid, is_land, (18.5, -63.0), 150)
+    assert near == {"radius_km": 150, "sea_cells": 8, "cloud_share": 0.25}
+
+
+def test_output_reports_cloud_gaps_near_the_island(tmp_path):
+    assert run.main(["--region", "sxm", "--sample", "--no-history", "--out", str(tmp_path)]) == 0
+    near = json.loads((tmp_path / "latest.json").read_text())["stats"]["near"]
+    assert near["radius_km"] == 150 and near["sea_cells"] > 1000 and 0 <= near["cloud_share"] <= 1

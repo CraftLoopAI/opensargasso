@@ -169,7 +169,27 @@
     if (!state.data) return;
     var k = state.day, d = longDay(k);
     $("mapcap").textContent = (k === 0 ? t("capSeen", { d: d }) : t(k === state.today ? "capToday" : "capForecast", { d: d })) +
-      (unc(k) ? " (" + t("lessCertain") + ")" : "");
+      (unc(k) || (k > 0 && stormNear()) ? " (" + t("lessCertain") + ")" : "");
+    renderLimits();
+  }
+
+  /* What the map cannot show, next to the map: the coast, cloud gaps this week, a storm nearby. */
+  var CLOUDY = 0.2;  // share of the sea near the island hidden by clouds that earns a badge
+  function stormNear() { var s = state.data && state.data.context && state.data.context.storms; return !!(s && s.active && s.active.length && ageDays(s.checked) <= 1); }
+  // With a storm near, the constant trade wind (used when no forecast came) would push the drift the wrong way.
+  function driftHidden() { return state.day > 0 && stormNear() && state.data.sources.wind.fallback !== false; }
+  function renderLimits() {
+    var box = $("maplimits"), d = state.data, near = d && d.stats.near; box.textContent = "";
+    if (!d) return;
+    function line(cls, text) { var p = el("p", cls, text); box.appendChild(p); return p; }
+    if (driftHidden()) line("badge warn", t("limitDriftHidden"));
+    else if (state.day > 0 && stormNear()) line("badge warn", t("limitStorm"));
+    if (near && near.cloud_share != null && near.cloud_share >= CLOUDY) {
+      line("badge", t("limitCloudy", { p: Math.round(100 * near.cloud_share), km: fmtNum(near.radius_km), place: d.region.name }));
+    }
+    var coast = line("small", t("limitCoast") + " "), why = el("button", "link", t("limitWhy")); why.type = "button";
+    why.addEventListener("click", function () { location.hash = "learn"; setTimeout(function () { scrollToEl($("lh-satellite")); }, 150); });
+    coast.appendChild(why);
   }
 
   function setDay(k) {
@@ -393,7 +413,7 @@
   // Only from a recent check: an old storm position would mislead more than no banner.
   function renderStorm() {
     var box = $("storm"), d = state.data, s = d && d.context && d.context.storms;
-    var near = s && s.active && s.active.length && ageDays(s.checked) <= 1 ? s.active[0] : null;
+    var near = stormNear() ? s.active[0] : null;
     box.hidden = !near; box.textContent = "";
     if (!near) return;
     box.appendChild(el("b", null, t("stormBanner", { kind: t("stormKinds")[near.kind] || t("stormKind"), name: near.name,
@@ -420,6 +440,7 @@
     row(t("dWind"), windText(s.wind));
     row(t("dPixels"), d.stats.detected.toLocaleString(state.lang) + " (" + t("pixelsRule", { t: fmtNum(d.settings.threshold) }) + ")");
     row(t("dCloud"), Math.round(100 * d.stats.nodata / d.stats.pixels) + " %");
+    if (d.stats.near && d.stats.near.cloud_share != null) row(t("dCloudNear", { km: fmtNum(d.stats.near.radius_km) }), Math.round(100 * d.stats.near.cloud_share) + " %");
   }
 
   /* ---------- map ---------- */
@@ -534,7 +555,7 @@
       // kernel is widened so the same area spreads over a larger footprint.
       var n = d.detections.length / Math.max(1, d.forecast[0].length);
       spread = Math.sqrt(Math.max(1, n));
-      pts = d.forecast[day].filter(function (p) { return p[2] === 0; }).map(function (p) { return [p[0], p[1], Math.min(1, n)]; });
+      pts = driftHidden() ? [] : d.forecast[day].filter(function (p) { return p[2] === 0; }).map(function (p) { return [p[0], p[1], Math.min(1, n)]; });
     }
     state.layers.density.setData(pts, cell, ramp().slice(1), spread);
     drawMarkers();
@@ -545,7 +566,7 @@
     var d = state.data, day = state.day, Lr = state.layers, panel = css("--panel"), ink = css("--ink"), colors = ramp(), levels = t("levels");
     var zoom = state.map.getZoom(), size = zoom >= 12 ? 7 : zoom >= 11 ? 5.5 : 4;
     Lr.ashore.clearLayers(); Lr.sites.clearLayers(); Lr.reports.clearLayers(); state.markers = {};
-    if (day > 0) d.forecast[day].forEach(function (p) {
+    if (day > 0 && !driftHidden()) d.forecast[day].forEach(function (p) {
       if (p[2] === 1) L.circleMarker([p[1], p[0]], { radius: 2.5, color: panel, weight: 1, fillColor: colors[3], fillOpacity: 1, interactive: false }).addTo(Lr.ashore);
     });
     state.reports.forEach(function (f) {

@@ -69,7 +69,7 @@ opensargasso/
 |---|---|
 | `generated`, `sample` | Build time (UTC) and whether the inputs were synthetic |
 | `sources` | Data time, age in days and dataset page link for each input, and whether a fallback was used |
-| `settings`, `stats` | Run parameters (threshold, background block, windage, diffusion, step, days, particle cap, risk radius and levels, cell size); pixel counts, including `land` (candidates skipped because they touch land), and `particle_weight` (seeds per particle, used to weight the counts) |
+| `settings`, `stats` | Run parameters (threshold, background block, windage, diffusion, step, days, particle cap, risk radius and levels, cell size); pixel counts, including `land` (candidates skipped because they touch land), `particle_weight` (seeds per particle, used to weight the counts), and `near`: the share of the sea within 150 km of the island that the satellite image left empty, mostly clouds (`cloud_share`), which turns on the site's cloudy-week badge at 20% or more |
 | `detections` | `[lon, lat, excess]` per flagged pixel |
 | `forecast` | For each day 0 to 7: `[lon, lat, state]` for up to 2,500 of the particles, an even subset (0 afloat, 1 beached) |
 | `sites` | Per beach and day: `risk` shown (0 Low, 1 Warning, 2 Medium, 3 High), the model's `model` levels and `count`, and `source` (`sir` or `model`) |

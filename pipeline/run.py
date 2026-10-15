@@ -12,6 +12,7 @@ import argparse
 import datetime as dt
 import functools
 import json
+import math
 import pathlib
 import random
 import sys
@@ -23,6 +24,7 @@ from . import __version__, bulletins, detect, drift, erddap, landmask, opendap, 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 MAP_PARTICLES = 2500  # particles published for the map; the counts use every simulated particle
 WIND_BUDGET_S = 300   # per wind source, so a stuck server cannot use up the job's 30 minutes
+CLOUD_RADIUS_KM = 150  # area around the island where cloud gaps matter for the next days
 
 
 def load_region(region_id: str) -> dict:
@@ -166,6 +168,24 @@ def fetch_context(region: dict, now: dt.datetime, log) -> tuple:
     return context, notes
 
 
+def cloud_share_near(grid, is_land, center: tuple, radius_km: float) -> dict:
+    """Share of the sea within `radius_km` of `center` (lat, lon) that the satellite image left
+    empty, mostly because of clouds. Sargassum there cannot be seen."""
+    lat0, lon0 = center
+    dlat = radius_km / 111.0
+    dlon = dlat / max(0.1, math.cos(math.radians(lat0)))
+    field, sea, gaps = grid.data["AFAI"], 0, 0
+    for j, lat in enumerate(grid.lats):
+        if abs(lat - lat0) > dlat:
+            continue
+        for i, lon in enumerate(grid.lons):
+            if abs(lon - lon0) > dlon or risk.distance_km(lon, lat, lon0, lat0) > radius_km or is_land(lon, lat):
+                continue
+            sea += 1
+            gaps += not math.isfinite(field[j][i])
+    return {"radius_km": radius_km, "sea_cells": sea, "cloud_share": round(gaps / sea, 3) if sea else None}
+
+
 def wind_source(wind, region: dict, wind_from: dict | None = None) -> dict:
     """Where the wind came from; `cached` holds the fetch time when an earlier run's forecast was reused."""
     if wind:
@@ -208,7 +228,8 @@ def build(region: dict, afai, currents, land, notes, is_sample: bool, now: dt.da
     rng = random.Random(now.toordinal())
     seeds = drift.seed_particles(detections, d["max_particles"], rng, cell)
     weight = sum(drift.seeds_for(x) for _, _, x in detections) / len(seeds) if seeds else 1.0
-    stats = {**stats, "particle_weight": round(weight, 3)}  # seeds per drawn particle, for the map
+    stats = {**stats, "particle_weight": round(weight, 3),  # seeds per particle, to weight the counts
+             "near": cloud_share_near(afai, is_land, tuple(region["view"]["center"]), region.get("cloud_radius_km", CLOUD_RADIUS_KM))}
     tracks = drift.simulate(
         seeds, drift.make_velocity(currents, d["fallback_current_ms"]), is_land,
         region["bbox"], days=d["days"], step_hours=d["step_hours"], windage=d["windage"],
