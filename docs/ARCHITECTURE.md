@@ -33,8 +33,9 @@ opensargasso/
 │   └── run.py                   command line entry point, writes site/data
 ├── site/
 │   ├── index.html, style.css    page and theme (light and dark)
-│   ├── app.js                   three views: beaches (map, outlook board), coastal managers (summary, table, CSV), data and methods
+│   ├── app.js                   four views: beaches (map, outlook board, health, bulletins), learn, coastal managers (summary, table, CSV), data and methods
 │   ├── i18n.js                  English, French, Dutch text
+│   ├── learn.js                 Learn page content in the three languages, with sources per section
 │   ├── config.js                GitHub repo for the report button, basemap tile server
 │   ├── fonts/                   Atkinson Hyperlegible Next (SIL OFL 1.1), self-hosted
 │   ├── vendor/leaflet/          Leaflet 1.9.4 (BSD 2-Clause), served with the site

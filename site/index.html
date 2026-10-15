@@ -29,6 +29,7 @@
   <div class="wrap">
     <nav class="views" id="views">
       <a href="#beaches" data-view="beaches"></a>
+      <a href="#learn" data-view="learn"></a>
       <a href="#managers" data-view="managers"></a>
       <a href="#data" data-view="data"></a>
     </nav>
@@ -109,6 +110,17 @@
     </div>
   </div>
 
+  <div class="view" id="view-learn" hidden>
+    <section class="intro">
+      <h1 id="l-title"></h1>
+      <p class="tag" id="l-intro"></p>
+    </section>
+    <div class="learn">
+      <nav class="ltoc" id="l-toc" aria-labelledby="l-title"></nav>
+      <div class="lbody" id="l-sections"></div>
+    </div>
+  </div>
+
   <div class="view" id="view-managers" hidden>
     <section class="intro">
       <h1 id="m-title"></h1>
@@ -163,6 +175,7 @@
 <script src="vendor/leaflet/leaflet.js"></script>
 <script src="config.js"></script>
 <script src="i18n.js"></script>
+<script src="learn.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

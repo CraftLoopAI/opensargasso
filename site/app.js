@@ -575,7 +575,7 @@
   }
 
   /* ---------- views ---------- */
-  var VIEWS = ["beaches", "managers", "data"];
+  var VIEWS = ["beaches", "learn", "managers", "data"];
   function currentView() { var v = location.hash.slice(1); return VIEWS.indexOf(v) >= 0 ? v : "beaches"; }
   function showView() {
     var v = currentView();
@@ -589,6 +589,35 @@
   function goToBeach(s) {
     if (location.hash !== "#beaches") location.hash = "beaches";
     showView(); focusSite(s);
+  }
+
+  /* ---------- learn ----------
+     Content in learn.js. The contents list scrolls with buttons: the address's # already picks the view. */
+  function scrollToEl(node) { if (node) node.scrollIntoView({ behavior: reduceMotion() ? "auto" : "smooth", block: "start" }); }
+  function renderLearn() {
+    var all = window.LEARN || {}, L = all[state.lang] || all.en, box = $("l-sections"), toc = $("l-toc");
+    box.textContent = ""; toc.textContent = "";
+    if (!L) return;
+    $("l-title").textContent = L.title; $("l-intro").textContent = L.intro;
+    L.sections.forEach(function (s) {
+      var sec = el("section", "lsec"), h = el("h2", null, s.title);
+      h.id = "lh-" + s.id; sec.setAttribute("aria-labelledby", h.id); sec.appendChild(h);
+      s.text.forEach(function (p) { sec.appendChild(el("p", null, p)); });
+      if (s.action) {
+        var go = el("button", "btn", s.action[0]); go.type = "button";
+        go.addEventListener("click", function () {
+          location.hash = s.action[1].slice(1);
+          setTimeout(function () { scrollToEl($("h-reports")); }, 150);  // after the view switch scrolls to the top
+        });
+        sec.appendChild(go);
+      }
+      var src = el("p", "small src"); src.appendChild(document.createTextNode(L.sourcesLabel + ": "));
+      s.sources.forEach(function (x, i) { if (i) src.appendChild(document.createTextNode("; ")); src.appendChild(linkTo(x[1], x[0])); });
+      sec.appendChild(src); box.appendChild(sec);
+      var item = el("button", "link", s.title); item.type = "button";
+      item.addEventListener("click", function () { scrollToEl(sec); });
+      toc.appendChild(item);
+    });
   }
 
   /* ---------- coastal managers ---------- */
@@ -772,11 +801,12 @@
     renderStatic(); renderNotices(); renderHeadline(); renderDays(); renderCaption();
     renderSites(); renderReports(); renderData(); renderPlay(); renderManagers(); renderDocs(); drawMap();
     renderHealth(); renderBulletins($("bulletins"), "h-bulletins"); renderBulletins($("m-bulletins"), "m-h-bulletins"); renderStorm();
+    renderLearn();
   }
 
   function getJSON(url) { return fetch(url, { cache: "no-cache" }).then(function (r) { if (!r.ok) throw new Error(url + " " + r.status); return r.json(); }); }
 
-  pickLang(); renderStatic(); renderHeadline(); renderPlay(); renderDocs(); showView();
+  pickLang(); renderStatic(); renderHeadline(); renderPlay(); renderDocs(); renderLearn(); showView();
   window.addEventListener("hashchange", function () { showView(); window.scrollTo(0, 0); });
   $("csv").addEventListener("click", downloadCSV);
   $("report-open").addEventListener("click", toggleReport);

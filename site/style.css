@@ -170,6 +170,18 @@ button.btn[disabled]{opacity:.6;cursor:progress}
 .chip-r1{background:var(--r1)} .chip-r2{background:var(--r2)} .chip-r3{background:var(--r3)}
 #rf-captcha:empty{display:none}
 #rf-status.err{color:var(--warn)}
+/* Learn page: contents on the left on wide screens, one reading column */
+.learn{display:grid;grid-template-columns:minmax(0,220px) minmax(0,68ch);gap:0 56px;padding:4px 0 24px}
+.ltoc{position:sticky;top:16px;align-self:start;display:flex;flex-direction:column;align-items:flex-start;gap:8px;font-size:14.5px}
+.ltoc .link{text-align:left;text-decoration:none;color:var(--muted)}
+.ltoc .link:hover{color:var(--accent);text-decoration:underline}
+.lsec{padding:22px 0;border-top:1px solid var(--line);scroll-margin-top:16px}
+.lsec:first-child{border-top:0;padding-top:0}
+.lsec h2{margin-bottom:10px}
+.lsec p{margin:0 0 12px;line-height:1.6}
+.lsec .btn{margin:2px 0 14px}
+.lsec .src{margin:0;line-height:1.5}
+@media (max-width:820px){.learn{grid-template-columns:minmax(0,1fr)}.ltoc{display:none}}
 /* Health panel and official links */
 #m-bulletins{display:flex;flex-direction:column;align-items:flex-start;gap:12px}
 .lower .block > h3,#m-bulletins > h3{font-size:16px;margin:6px 0 -4px}
