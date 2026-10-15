@@ -22,8 +22,8 @@ CURRENTS = {
     "verified": True,
 }
 
-# GFS 10 m wind. NOAA PFEG's ERDDAP datasets are copies of the PacIOOS one, so
-# PacIOOS comes first and the NOAA copy is a last resort. NOAA's servers refused
+# GFS 10 m wind, tried in the order of WINDS below. NOAA PFEG's ERDDAP datasets are
+# copies of the PacIOOS one, so the NOAA copy is a last resort. NOAA's servers refused
 # GitHub's runners (HTTP 403, timeouts) in October 2026 while answering elsewhere.
 WIND = {
     "name": "NOAA NCEP GFS 10 m wind forecast, 0.5 degree, via PacIOOS (University of Hawaii)",
@@ -56,7 +56,9 @@ WIND_UCAR = {
     "verified": True,  # 3-hourly to about 16 days ahead; checked 15 October 2026
 }
 
-WINDS = [WIND, WIND_UCAR, WIND_MIRROR]  # tried in order; the PacIOOS copy last, as it fails with PacIOOS
+# UCAR first: on 15 October 2026 it answered GitHub's runners every time, while PacIOOS
+# timed out on two of four tries, each costing up to WIND_BUDGET_S. The PacIOOS copy last.
+WINDS = [WIND_UCAR, WIND, WIND_MIRROR]
 
 SIR = {
     "name": "NOAA AOML Sargassum Inundation Risk (SIR v1.5), with USF",

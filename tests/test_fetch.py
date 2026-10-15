@@ -113,4 +113,4 @@ def test_probe_reports_answers_refusals_and_silence():
     assert probe.check(URL, opener=refuse)[::2] == (403, "blacklist")
     assert probe.check(URL, opener=silent)[0] == "no answer"
     labels = [label for label, _ in probe.candidates()]
-    assert labels[0].startswith("wind: PacIOOS") and any("NHC" in label for label in labels)
+    assert labels[0].startswith("wind: UCAR") and any("NHC" in label for label in labels)

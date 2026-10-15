@@ -71,32 +71,38 @@ def test_lon360_source_is_asked_in_0_360_and_answers_in_pm180():
     assert s[0].lons == [-63.5, -63.0] and s[0].value("ugrd10m", -63.0, 18.0) == -6.0
 
 
-def test_pacioos_comes_first_and_is_asked_north_to_south():
-    assert sources.WINDS == [sources.WIND, sources.WIND_UCAR, sources.WIND_MIRROR]
+def test_ucar_comes_first_and_pacioos_is_asked_north_to_south():
+    assert sources.WINDS == [sources.WIND_UCAR, sources.WIND, sources.WIND_MIRROR]
     assert "pacioos" in sources.WIND["base"] and "pfeg" in sources.WIND_MIRROR["base"]
     asked = []
     erddap.fetch_series(sources.WIND, BBOX, start="2026-10-12T12:00:00Z", fetch=lambda url: asked.append(url) or FIXTURE.read_text())
     assert len(asked) == 1 and "%5B(19.0):1:(17.0)%5D" in asked[0]   # one request, latitude in the stored order
 
 
-def test_fetch_wind_tries_ucar_then_the_mirror(monkeypatch):
-    def fake(source, bbox, start, end="last", **kw):
+def test_fetch_wind_tries_ucar_then_pacioos_then_the_mirror(monkeypatch):
+    def answer(source, bbox, start, end="last", **kw):
+        return series()
+
+    def down(source, bbox, start, end="last", **kw):
+        raise RuntimeError("down")
+
+    def pacioos_blocked(source, bbox, start, end="last", **kw):
         if source is sources.WIND:
             raise erddap.HostBlocked("HTTP 403 from pae-paha.pacioos.hawaii.edu: blocked")
         return series()
 
-    def ucar_down(source, bbox, start, end="last", **kw):
-        raise RuntimeError("down")
-
-    monkeypatch.setattr(erddap, "fetch_series", fake)
-    monkeypatch.setattr(opendap, "fetch_wind_series", fake)
+    monkeypatch.setattr(opendap, "fetch_wind_series", answer)
+    monkeypatch.setattr(erddap, "fetch_series", down)
     used, got, problems = run.fetch_wind(BBOX, "2026-10-12T12:00:00Z")
-    assert used is sources.WIND_UCAR and len(got) == 2            # the independent source answers
-    monkeypatch.setattr(opendap, "fetch_wind_series", ucar_down)
+    assert used is sources.WIND_UCAR and len(got) == 2 and problems == []   # UCAR answers: nothing else is asked
+    monkeypatch.setattr(opendap, "fetch_wind_series", down)
+    monkeypatch.setattr(erddap, "fetch_series", answer)
+    assert run.fetch_wind(BBOX, "2026-10-12T12:00:00Z")[0] is sources.WIND
+    monkeypatch.setattr(erddap, "fetch_series", pacioos_blocked)
     used, got, problems = run.fetch_wind(BBOX, "2026-10-12T12:00:00Z")
     assert used is sources.WIND_MIRROR
-    assert problems == ["ncep_global_lon180 at pae-paha.pacioos.hawaii.edu: HTTP 403 from pae-paha.pacioos.hawaii.edu: blocked",
-                        "GFS Global_0p5deg Best at thredds.ucar.edu: down"]
+    assert problems == ["GFS Global_0p5deg Best at thredds.ucar.edu: down",
+                        "ncep_global_lon180 at pae-paha.pacioos.hawaii.edu: HTTP 403 from pae-paha.pacioos.hawaii.edu: blocked"]
 
 
 def test_fetch_wind_gives_each_source_a_time_budget(monkeypatch):

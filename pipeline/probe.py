@@ -23,11 +23,11 @@ def candidates() -> list:
     wind = lambda s: erddap.griddap_url(s["base"], s["dataset"], s["variables"], BOX, time="last",  # noqa: E731
                                         descending_lat=s.get("lat_descending", False))
     return [
-        ("wind: PacIOOS ERDDAP (primary)", wind(sources.WIND)),
+        ("wind: UCAR THREDDS GFS 0.5 degree (first)", "https://thredds.ucar.edu/thredds/dodsC/grib/NCEP/GFS/Global_0p5deg/Best.dds"),
+        ("wind: PacIOOS ERDDAP (second)", wind(sources.WIND)),
         ("wind: PacIOOS THREDDS", "https://pae-paha.pacioos.hawaii.edu/thredds/dodsC/ncep_global/NCEP_Global_Atmospheric_Model_best.ncd.dds"),
-        ("wind: NOAA PFEG upwell ERDDAP (copy)", wind(sources.WIND_MIRROR)),
+        ("wind: NOAA PFEG upwell ERDDAP (copy, last)", wind(sources.WIND_MIRROR)),
         ("wind: NOAA PFEG coastwatch ERDDAP", "https://coastwatch.pfeg.noaa.gov/erddap/info/index.html"),
-        ("wind: UCAR THREDDS GFS 0.5 degree", "https://thredds.ucar.edu/thredds/dodsC/grib/NCEP/GFS/Global_0p5deg/Best.dds"),
         ("wind: Open-Meteo GFS", "https://api.open-meteo.com/v1/gfs?latitude=18.05&longitude=-63.05"
                                  "&hourly=wind_speed_10m,wind_direction_10m&forecast_days=1"),
         ("wind: NOAA NOMADS", "https://nomads.ncep.noaa.gov/"),
