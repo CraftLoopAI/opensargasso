@@ -2,7 +2,7 @@ name: Daily update
 on:
   schedule:
     - cron: "23 11 * * *"   # once a day, 11:23 UTC
-    - cron: "23 15 * * *"   # second chance: goes ahead only if the 11:23 run had no fresh wind forecast
+    - cron: "53 16 * * *"   # second run: goes ahead only if the first had no fresh wind forecast or NOAA has posted a newer SIR report
   workflow_dispatch:
 permissions:
   contents: write
@@ -28,8 +28,9 @@ jobs:
         env:
           SCHEDULE: ${{ github.event.schedule }}
         run: |
-          # A new run usually gets a new runner IP, which often gets past a server that blocked the first one.
-          if [ "$SCHEDULE" = "23 15 * * *" ]; then python -m pipeline.rerun >> "$GITHUB_OUTPUT"; else echo "go=true" >> "$GITHUB_OUTPUT"; fi
+          # NOAA posts each SIR report the next afternoon, after the morning run; a new run also usually
+          # gets a new runner IP, which often gets past a server that blocked the first one.
+          if [ "$SCHEDULE" = "53 16 * * *" ]; then python -m pipeline.rerun >> "$GITHUB_OUTPUT"; else echo "go=true" >> "$GITHUB_OUTPUT"; fi
       - name: Restore the last good wind forecast
         if: steps.gate.outputs.go == 'true'
         uses: actions/cache@v4   # reused when every wind source fails; saved again after the run

@@ -13,6 +13,17 @@ AFAI = {
     "verified": True,
 }
 
+# The daily images behind the 7-day composite. The composite keeps each pixel's highest
+# value of the week, so the day that value came from tells when that patch was seen.
+AFAI_DAILY = {
+    "name": "USF AFAI daily fields, served by NOAA AOML",
+    "base": "https://cwcgom.aoml.noaa.gov/erddap",
+    "dataset": "noaa_aoml_atlantic_oceanwatch_AFAI_1D",
+    "variables": ["AFAI"],
+    "has_time": True,
+    "verified": True,  # 20 October 2026: every 7-day value equals the highest of its seven daily values
+}
+
 CURRENTS = {
     "name": "NOAA AOML near real time geostrophic currents",
     "base": "https://cwcgom.aoml.noaa.gov/erddap",

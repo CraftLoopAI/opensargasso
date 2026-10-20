@@ -82,14 +82,37 @@ def test_retries_stop_at_the_deadline(monkeypatch):
     assert len(calls) == 1
 
 
-def test_second_run_only_when_the_first_had_no_fresh_wind(tmp_path):
-    today = dt.date(2026, 10, 15)
-    assert rerun.needed(tmp_path, today)[0] is True                                   # no run yet today
+def test_second_run_when_the_first_had_no_fresh_wind(tmp_path):
+    today, nothing_new = dt.date(2026, 10, 15), lambda url: False
+    assert rerun.needed(tmp_path, today, nothing_new)[0] is True                       # no run yet today
     for wind, go in (("forecast", False), ("cached", True), ("constant", True)):
-        (tmp_path / "2026-10-15.json").write_text(json.dumps({"date": "2026-10-15", "wind": wind}))
-        assert rerun.needed(tmp_path, today)[0] is go, wind
+        (tmp_path / "2026-10-15.json").write_text(json.dumps({"date": "2026-10-15", "wind": wind, "sir_date": "2026-10-14"}))
+        assert rerun.needed(tmp_path, today, nothing_new)[0] is go, wind
     (tmp_path / "2026-10-15.json").write_text("{not json")
-    assert rerun.needed(tmp_path, today)[0] is True
+    assert rerun.needed(tmp_path, today, nothing_new)[0] is True
+
+
+def test_second_run_when_noaa_posted_a_newer_sir_report(tmp_path):
+    today, asked = dt.date(2026, 10, 15), []
+    history = lambda sir_date: (tmp_path / "2026-10-15.json").write_text(json.dumps({"wind": "forecast", "sir_date": sir_date}))  # noqa: E731
+    posted = lambda *days: lambda url: asked.append(url[-13:-4]) or url[-12:-4] in days  # noqa: E731
+
+    history("2026-10-13")
+    go, why = rerun.needed(tmp_path, today, posted("20261014"))
+    assert go is True and "2026-10-14" in why
+    assert asked == ["_20261014"]                         # yesterday's at most: a day's report comes out the next day
+    assert rerun.needed(tmp_path, today, posted())[0] is False
+
+    def down(url):
+        raise OSError("timed out")
+    assert rerun.needed(tmp_path, today, down)[0] is False   # no answer: a second run would get no more
+
+    asked.clear()
+    history("2026-10-14")
+    assert rerun.needed(tmp_path, today, posted("20261014"))[0] is False and asked == []   # it already has the newest
+
+    history(None)                                         # the first run got no SIR report at all
+    assert rerun.needed(tmp_path, today, posted("20261011"))[0] is True
 
 
 def test_probe_reports_answers_refusals_and_silence():

@@ -14,6 +14,7 @@ import re
 import urllib.parse
 
 from . import erddap
+from .erddap import parse_ascii  # OPeNDAP text, which ERDDAP serves too
 
 U = "u-component_of_wind_height_above_ground"
 V = "v-component_of_wind_height_above_ground"
@@ -73,39 +74,3 @@ def time_reference(das: str, tdim: str) -> dt.datetime:
 
 def erddap_time(stamp: str) -> dt.datetime:
     return dt.datetime.fromisoformat(stamp.replace("Z", "+00:00"))
-
-
-def parse_ascii(text: str) -> dict:
-    """{name: values} from an OPeNDAP ASCII response.
-
-    1-D variables give a list of numbers; arrays give one list per row (the
-    last dimension), in row order. Grid members are named "grid.member".
-    """
-    if text.lstrip().startswith("Error {"):
-        raise RuntimeError(" ".join(text.split())[:300])
-    body = re.split(r"\n-{10,}\n", text, maxsplit=1)[-1]                 # after the line of dashes
-    out, name = {}, None
-    for line in body.splitlines():
-        line = line.strip()
-        if not line:
-            name = None
-            continue
-        header = re.fullmatch(r"([\w.\-]+)((?:\[\d+\])+)", line)
-        if header:
-            name = header.group(1)
-            out[name] = []
-            continue
-        if name is None:
-            continue
-        if line.startswith("["):                                          # "[t][h][i], v, v, ..." one row
-            out[name].append([_num(v) for v in line.split(",")[1:]])
-        else:                                                             # a 1-D variable's values
-            out[name].extend(_num(v) for v in line.split(","))
-    return out
-
-
-def _num(text: str) -> float:
-    try:
-        return float(text)
-    except ValueError:
-        return erddap.NAN

@@ -7,6 +7,7 @@ import statistics
 from .erddap import Grid
 
 GLARE_DEG = 0.03  # how far coastal glare reaches from a gap masked as land: two sensor pixels, about 3 km
+COMPOSITE_DAYS = 7  # days in the AFAI composite the daily job reads
 
 
 def afai_from_bands(r667: float, r748: float, r869: float) -> float:
@@ -86,3 +87,17 @@ def detect(grid: Grid, threshold: float, block_deg: float = 0.75, var: str = "AF
                     detections.append((grid.lons[i], grid.lats[j], excess))
     stats["detected"] = len(detections)
     return detections, stats
+
+
+def seen_days(detections, composite: Grid, daily: list, var: str = "AFAI") -> list:
+    """For each detection, how many days before the composite's date it was seen, or None.
+
+    The composite keeps each pixel's highest value of the week, so that value is
+    the one from the day the patch was seen; `daily[k]` is the image from k days
+    before the composite. Ties go to the newest day.
+    """
+    out = []
+    for lon, lat, _ in detections:
+        v = composite.value(var, lon, lat)
+        out.append(next((k for k, g in enumerate(daily) if g.value(var, lon, lat) == v), None))
+    return out

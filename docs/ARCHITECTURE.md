@@ -28,7 +28,7 @@ opensargasso/
 │   ├── sample.py                synthetic inputs for offline runs and tests
 │   ├── calibrate.py             backtest against NOAA SIR (docs/CALIBRATION.md)
 │   ├── probe.py                 one request to each data source, to see which answer from GitHub's runners
-│   ├── rerun.py                 whether the second daily run goes ahead (only if the first had no fresh wind)
+│   ├── rerun.py                 whether the second daily run goes ahead (no fresh wind, or a newer SIR report)
 │   ├── serve.py                 local server for development: free port, live reload, no caching
 │   └── run.py                   command line entry point, writes site/data
 ├── site/
@@ -46,7 +46,7 @@ opensargasso/
 ├── worker/                      sighting relay on Cloudflare: website form -> GitHub issue (README.md)
 ├── tests/test_pipeline.py       unit tests and an end-to-end sample run
 ├── .github/
-│   ├── workflows/daily.yml      fetch, build, commit data, deploy Pages; second run if the wind failed
+│   ├── workflows/daily.yml      fetch, build, commit data, deploy Pages; second run when there is something new
 │   ├── workflows/probe.yml      run pipeline/probe.py on a GitHub runner, by hand
 │   ├── workflows/tests.yml      tests on every push and pull request
 │   ├── workflows/report.yml     publish a sighting when it is approved
@@ -56,8 +56,8 @@ opensargasso/
 
 ## Daily flow
 
-1. **Fetch.** `erddap.fetch_grid` requests a bounding box as CSV, in the latitude order a source records, or ascending then descending when it records none. Timeouts, HTTP 429, 5xx and ERDDAP's "Currently unknown datasetID" (a dataset reloading) are retried after 20, 60 and 120 seconds; a server that answers 403 has blocked the runner and is skipped, and its reason is logged. The GFS wind is fetched as a 3-hourly series from the satellite date to the end of the newest forecast, from UCAR's THREDDS server (OPeNDAP text, `pipeline/opendap.py`), then PacIOOS, then NOAA PFEG's copy of PacIOOS, each within five minutes (`run.fetch_wind`). Each good forecast is kept between runs (Actions cache) and reused when both fail, as long as it covers at least a day; the drift uses the constant trade wind after its end. If the 11:23 UTC run had no fresh forecast, a second run at 15:23 UTC tries again on a new runner (`pipeline/rerun.py`). The land mask is read from `regions/land/`, so it needs no download; a region without one falls back to ETOPO1 from ERDDAP, cached in `.cache/`.
-2. **Detect.** AFAI is read at full resolution (0.015 degrees, about 1.6 km). The box is split into blocks of about 0.75 degrees. Each block's median AFAI is the background. A pixel is flagged when it exceeds the background by the threshold (0.0005 by default), unless its footprint touches land, because the AFAI product leaves small islands and part-land pixels unmasked and land vegetation reads as algae, or it lies within about 3 km (two pixels) of land the product masked, where coastal glare raises AFAI.
+1. **Fetch.** `erddap.fetch_grid` requests a bounding box as CSV or OPeNDAP text (`.asc`, a fifth of the size, same values), in the latitude order a source records, or ascending then descending when it records none. The 7-day AFAI composite and the seven daily images behind it are fetched as `.asc` (about 2 MB each for the `sxm` box), within three minutes for the daily images (`run.fetch_daily`). Timeouts, HTTP 429, 5xx and ERDDAP's "Currently unknown datasetID" (a dataset reloading) are retried after 20, 60 and 120 seconds; a server that answers 403 has blocked the runner and is skipped, and its reason is logged. The GFS wind is fetched as a 3-hourly series from the satellite date to the end of the newest forecast, from UCAR's THREDDS server (OPeNDAP text, `pipeline/opendap.py`), then PacIOOS, then NOAA PFEG's copy of PacIOOS, each within five minutes (`run.fetch_wind`). Each good forecast is kept between runs (Actions cache) and reused when both fail, as long as it covers at least a day; the drift uses the constant trade wind after its end. A second run at 16:53 UTC goes ahead if the 11:23 UTC run had no fresh forecast, trying again on a new runner, or if NOAA has posted a newer SIR report since, which it does the afternoon after each day (`pipeline/rerun.py`). The land mask is read from `regions/land/`, so it needs no download; a region without one falls back to ETOPO1 from ERDDAP, cached in `.cache/`.
+2. **Detect.** AFAI is read at full resolution (0.015 degrees, about 1.6 km). The box is split into blocks of about 0.75 degrees. Each block's median AFAI is the background. A pixel is flagged when it exceeds the background by the threshold (0.0005 by default), unless its footprint touches land, because the AFAI product leaves small islands and part-land pixels unmasked and land vegetation reads as algae, or it lies within about 3 km (two pixels) of land the product masked, where coastal glare raises AFAI. The composite keeps each pixel's highest value of the week, so each detection is dated by the daily image that has the same value (`detect.seen_days`; the newest day when several do). If a daily image is missing, no detection is dated.
 3. **Seed.** Each flagged pixel becomes one to three particles, capped at 10,000. When the cap applies, each particle stands for several seeds and the counts are weighted (`particle_weight`).
 4. **Drift.** Every 3 hours a particle moves with the surface current plus 2 % of the GFS wind at that hour (the nearest 3-hourly step), plus a small random step. It stops when it reaches land or leaves the box.
 5. **Grade.** Each beach takes the latest NOAA SIR level of its nearest coastal segment, for every day of the outlook (a backtest showed this beats the drift forecast; see `CALIBRATION.md`). The drift model also grades each beach from the particles within 50 km, weighted for the particle cap (44 or more is Warning, 107 Medium, 159 High); those levels are kept and fill in where SIR has none.
@@ -70,7 +70,7 @@ opensargasso/
 | `generated`, `sample` | Build time (UTC) and whether the inputs were synthetic |
 | `sources` | Data time, age in days and dataset page link for each input, and whether a fallback was used |
 | `settings`, `stats` | Run parameters (threshold, background block, windage, diffusion, step, days, particle cap, risk radius and levels, cell size); pixel counts, including `land` (candidates skipped because they touch land), `particle_weight` (seeds per particle, used to weight the counts), and `near`: the share of the sea within 150 km of the island that the satellite image left empty, mostly clouds (`cloud_share`), which turns on the site's cloudy-week badge at 20% or more |
-| `detections` | `[lon, lat, excess]` per flagged pixel |
+| `detections` | `[lon, lat, excess, days]` per flagged pixel, where `days` is how many days before the composite's date it was seen (0 to 6), or `null` when the daily images were unavailable |
 | `forecast` | For each day 0 to 7: `[lon, lat, state]` for up to 2,500 of the particles, an even subset (0 afloat, 1 beached) |
 | `sites` | Per beach and day: `risk` shown (0 Low, 1 Warning, 2 Medium, 3 High), the model's `model` levels and `count`, and `source` (`sir` or `model`) |
 | `context` | `usf`: the newest USF monthly outlook (`url`, `month`); `storms`: when NHC was checked, the radius, and active Atlantic storms within it (`name`, `kind`, `distance_km`, `updated`, `url`). Either is `null` when its server did not answer |
@@ -88,7 +88,7 @@ A maintainer checks the issue and adds the label `report-approved`. The workflow
 ## Known limits
 
 - Geostrophic currents are coarse (0.2 degrees) and miss nearshore flow, tides and wind-driven surface currents, and one day of currents is used for the whole week.
-- The 7-day AFAI composite hides day-to-day movement, and clouds leave gaps.
+- The 7-day AFAI composite shows each patch where it was seen, up to 6 days before the image date. The map draws the 4 earliest days in gray, but the drift forecast starts every patch on the image date, so it counts a moving mat several times along its track. Clouds leave gaps.
 - The land mask has cells of about 220 m, so the smallest islets and channels can be missed.
 - GFS wind is on a 0.5 degree grid (about 55 km), so wind effects around the island itself are missed.
 - Beach levels repeat the latest SIR report for the whole week, so sargassum on its way in does not show until NOAA's next report.

@@ -1,11 +1,13 @@
 @font-face{font-family:"Atkinson Hyperlegible Next";src:url(fonts/atkinson-hyperlegible-next.woff2) format("woff2");font-weight:200 800;font-style:normal;font-display:swap}
 
 /* Tokens. --r1..--r3 are the sargassum ramp (Low, Moderate, High): one hue, more is
-   darker on light and brighter on dark. Clear is an empty mark, not a color. */
+   darker on light and brighter on dark. --o1..--o3 are a narrower gray ramp, for
+   sargassum seen earlier in the week. Clear is an empty mark, not a color. */
 :root{
   --bg:#edf2f2; --panel:#fff; --ink:#0e2730; --muted:#52696f; --line:#d2dcdd; --accent:#0a6676;
   --band:rgba(10,102,118,.09); --clear:#b7c5c8;
   --r1:#d4a020; --r2:#a8650c; --r3:#663407;
+  --o1:#a19d94; --o2:#8d8980; --o3:#77736a;
   --warn:#b3261e; --warn-soft:#f9e1de; --note-soft:#f5ead0;
   --tiles:none; --sea:#aad3df;
   color-scheme:light;
@@ -14,6 +16,7 @@
   --bg:#0b171b; --panel:#11232a; --ink:#e2eceb; --muted:#8ea6ab; --line:#22383f; --accent:#5ec2cf;
   --band:rgba(94,194,207,.13); --clear:#4a6168;
   --r1:#8a5f14; --r2:#c98d22; --r3:#f3c65e;
+  --o1:#48514e; --o2:#58625e; --o3:#68726d;
   --warn:#f2867c; --warn-soft:#3b1d1a; --note-soft:#30280f;
   --tiles:invert(1) hue-rotate(180deg) brightness(.95) contrast(.9); --sea:#1e3c45;
   color-scheme:dark}}
@@ -88,6 +91,7 @@ h2{font-size:20px;line-height:1.25;font-weight:700}
 .legend .lg{display:inline-flex;align-items:center;gap:7px;flex-wrap:wrap}
 .legend .ends{display:inline-flex;align-items:center;gap:5px}
 .legend .ramp{display:block;width:76px;height:9px;border-radius:5px;background:linear-gradient(90deg,color-mix(in srgb,var(--r1) 30%,transparent),var(--r1) 22%,var(--r2) 58%,var(--r3))}
+.legend .ramp.old{background:linear-gradient(90deg,color-mix(in srgb,var(--o1) 30%,transparent),var(--o1) 22%,var(--o2) 58%,var(--o3))}
 .legend .dot{display:block;width:7px;height:7px;border-radius:50%;background:var(--r3);box-shadow:0 0 0 1.5px var(--panel)}
 .legend .lvl{display:inline-flex;align-items:center;gap:5px}
 .legend .diamond{display:block;width:9px;height:9px;transform:rotate(45deg);border:2px solid var(--ink)}

@@ -25,6 +25,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 MAP_PARTICLES = 2500  # particles published for the map; the counts use every simulated particle
 WIND_BUDGET_S = 300   # per wind source, so a stuck server cannot use up the job's 30 minutes
 CLOUD_RADIUS_KM = 150  # area around the island where cloud gaps matter for the next days
+DAILY_BUDGET_S = 180   # for the seven daily satellite images that date the detections
 
 
 def load_region(region_id: str) -> dict:
@@ -65,6 +66,24 @@ def fetch_wind(bbox: dict, start: str, end: str = "last"):
     raise RuntimeError("; ".join(problems))
 
 
+def fetch_daily(bbox: dict, composite, stride: int) -> list:
+    """The daily AFAI images behind the 7-day composite, newest first: [k] is from k days before it.
+
+    Raises if one is missing: the map then shows every detection alike rather
+    than date some of them wrongly.
+    """
+    end = parse_time(composite.time)
+    fetch = functools.partial(erddap.fetch_text, deadline=time.monotonic() + DAILY_BUDGET_S)
+    out = []
+    for k in range(detect.COMPOSITE_DAYS):
+        want = (end - dt.timedelta(days=k)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        grid = erddap.fetch_grid(sources.AFAI_DAILY, bbox, stride=stride, time=want, fetch=fetch, fmt="asc")
+        if grid.time != want:  # ERDDAP answers with the nearest day it has
+            raise ValueError(f"no daily image for {want[:10]}, nearest is {grid.time}")
+        out.append(grid)
+    return out
+
+
 def source_page(source: dict) -> str:
     """A page about the dataset, for people."""
     return source.get("page") or erddap.dataset_page(source)
@@ -95,9 +114,15 @@ def load_wind(path: pathlib.Path, start: str):
 
 
 def fetch_inputs(region: dict, cache_dir: pathlib.Path, log, today: dt.date | None = None):
-    """Live inputs. AFAI is required; currents, wind, land and SIR degrade gracefully."""
+    """Live inputs. AFAI is required; the daily images, currents, wind, land and SIR degrade gracefully."""
     bbox, notes = region["bbox"], []
-    afai = erddap.fetch_grid(sources.AFAI, bbox, stride=region["afai"]["stride"])
+    afai = erddap.fetch_grid(sources.AFAI, bbox, stride=region["afai"]["stride"], fmt="asc")
+    try:  # the day each detection was seen, so the map can tell recent sightings from older ones
+        daily = fetch_daily(bbox, afai, region["afai"]["stride"])
+    except Exception as e:  # noqa: BLE001
+        daily = None
+        notes.append(f"daily satellite images unavailable ({e}); the map shows every detection of the week alike")
+        log(notes[-1])
     try:
         currents = erddap.fetch_grid(sources.CURRENTS, bbox)
     except Exception as e:  # noqa: BLE001 - any failure here has the same fallback
@@ -141,7 +166,7 @@ def fetch_inputs(region: dict, cache_dir: pathlib.Path, log, today: dt.date | No
         sir_levels = None
         notes.append(f"NOAA SIR unavailable ({e}); beach levels come from the drift model")
         log(notes[-1])
-    return afai, currents, (wind_from, wind), land, sir_levels, notes
+    return afai, daily, currents, (wind_from, wind), land, sir_levels, notes
 
 
 def land_source(land) -> dict:
@@ -219,12 +244,13 @@ def beach_levels(model_sites, sir_levels, days: int):
 
 
 def build(region: dict, afai, currents, land, notes, is_sample: bool, now: dt.datetime, wind=None, sir_levels=None,
-          wind_from=None, context=None) -> dict:
+          wind_from=None, context=None, daily=None) -> dict:
     a, d = region["afai"], region["drift"]
     is_land = drift.make_land_test(land)
     cell = abs(afai.dlon)
     detections, stats = detect.detect(afai, a["threshold"], a["background_block_deg"],
                                       is_land=is_land, pixel_deg=cell / a["stride"])
+    seen = detect.seen_days(detections, afai, daily) if daily else [None] * len(detections)
     rng = random.Random(now.toordinal())
     seeds = drift.seed_particles(detections, d["max_particles"], rng, cell)
     weight = sum(drift.seeds_for(x) for _, _, x in detections) / len(seeds) if seeds else 1.0
@@ -261,7 +287,7 @@ def build(region: dict, afai, currents, land, notes, is_sample: bool, now: dt.da
                      "days": d["days"], "max_particles": d["max_particles"], "radius_km": region["risk"]["radius_km"],
                      "risk": region["risk"], "cell_deg": round(cell, 4)},
         "stats": stats,
-        "detections": [[round(lon, 3), round(lat, 3), round(x, 5)] for lon, lat, x in detections],
+        "detections": [[round(lon, 3), round(lat, 3), round(x, 5), days] for (lon, lat, x), days in zip(detections, seen)],
         "forecast": forecast,
         "sites": sites,
     }
@@ -302,17 +328,17 @@ def main(argv=None) -> int:
         bbox = region["bbox"]
         afai, currents, land, notes = sample.afai_grid(bbox), sample.currents_grid(bbox), sample.land_grid(bbox), \
             ["synthetic sample data, not an observation"]
-        wind = wind_from = sir_levels = context = None
+        wind = wind_from = sir_levels = context = daily = None
     else:
         try:
-            afai, currents, (wind_from, wind), land, sir_levels, notes = fetch_inputs(region, ROOT / ".cache", log, now.date())
+            afai, daily, currents, (wind_from, wind), land, sir_levels, notes = fetch_inputs(region, ROOT / ".cache", log, now.date())
         except Exception as e:  # noqa: BLE001
             log(f"AFAI fetch failed, keeping the previous output: {e}")
             return 1
         context, context_notes = fetch_context(region, now, log)
         notes += context_notes
     result = build(region, afai, currents, land, notes, args.sample, now, wind=wind, sir_levels=sir_levels,
-                   wind_from=wind_from, context=context)
+                   wind_from=wind_from, context=context, daily=daily)
     write_outputs(result, pathlib.Path(args.out), now, history=not args.no_history)
     log(f"{result['stats']['detected']} pixels flagged, {len(result['forecast'][0])} particles on the map, "
         f"AFAI time {result['sources']['afai']['time']}")

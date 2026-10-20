@@ -4,6 +4,7 @@
   var state = { lang: "en", day: 0, data: null, reports: [], base: 0, today: -1, sel: null, timer: null,
                 map: null, layers: {}, markers: {} };
   var STALE_DAYS = 10, OUTDATED_DAYS = 2, DAY_MS = 864e5, STEP_MS = 900, UNCERTAIN_FROM = 4;  // persistence loses skill after day 3
+  var WEEK_DAYS = 7, RECENT_DAYS = 3;  // the satellite composite's days; sightings this recent get the sargassum colors
   var ICON = {
     play: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9.5-5.5z" fill="currentColor"/></svg>',
     pause: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 2.5h3.2v11H3.5zM9.3 2.5h3.2v11H9.3z" fill="currentColor"/></svg>',
@@ -62,6 +63,10 @@
   }
   function fmtDay(k, opts) { opts.timeZone = "UTC"; return new Date(state.base + k * DAY_MS).toLocaleDateString(state.lang, opts); }
   function longDay(k) { return fmtDay(k, { weekday: "long", day: "numeric", month: "long" }); }
+  function seenOn(k) { return fmtDay(-k, { day: "numeric", month: "short" }); }  // k days before the image date
+  /* A detection's 4th value is how many days before the image date it was seen, or null. */
+  function dated() { return !!state.data && state.data.detections.some(function (c) { return c[3] != null; }); }
+  function recent(c) { return c[3] != null && c[3] < RECENT_DAYS; }
   function dayNum(k) { return new Date(state.base + k * DAY_MS).getUTCDate(); }
 
   function pickLang() {
@@ -106,10 +111,11 @@
   function renderLegend() {
     var lg = $("legend"); lg.textContent = "";
     function item(cls) { var s = el("span", "lg " + (cls || "")); lg.appendChild(s); return s; }
-    var sea = item(), ends = el("span", "ends");
-    sea.appendChild(el("span", null, t(state.day === 0 ? "legendSeen" : "legendDrift")));
+    var sea = item(), ends = el("span", "ends"), split = state.day === 0 && dated();
+    sea.appendChild(el("span", null, split ? t("legendRecent", { from: seenOn(RECENT_DAYS - 1), to: seenOn(0) }) : t(state.day === 0 ? "legendSeen" : "legendDrift")));
     ends.appendChild(el("span", null, t("less"))); ends.appendChild(el("i", "ramp")); ends.appendChild(el("span", null, t("more")));
     sea.appendChild(ends);
+    if (split) { var old = item(); old.appendChild(el("span", null, t("legendOlder", { from: seenOn(WEEK_DAYS - 1), to: seenOn(RECENT_DAYS) }))); old.appendChild(el("i", "ramp old")); }
     if (state.day > 0) { var ashore = item(); ashore.appendChild(el("i", "dot")); ashore.appendChild(document.createTextNode(t("legendAshore"))); }
     var lv = item(); lv.appendChild(el("span", null, t(fromSir() || !state.data ? "legendBeachSir" : "legendBeachModel")));
     t("levels").forEach(function (name, r) { var s = el("span", "lvl"); s.appendChild(el("i", "chip l" + r)); s.appendChild(document.createTextNode(name)); lv.appendChild(s); });
@@ -537,6 +543,7 @@
     var tiles = (window.OPENSARGASSO || {}).tiles;  // the basemap is set in config.js
     if (tiles) L.tileLayer(tiles.url, { maxZoom: tiles.maxZoom || 18, attribution: tiles.attribution }).addTo(map);
     map.createPane("density").style.zIndex = 350;
+    state.layers.older = new (makeDensityLayer())({ pane: "density" }).addTo(map);  // under the recent sightings
     state.layers.density = new (makeDensityLayer())({ pane: "density" }).addTo(map);
     ["ashore", "sites", "reports"].forEach(function (k) { state.layers[k] = L.layerGroup().addTo(map); });
     if (window.ResizeObserver) new ResizeObserver(function () { map.invalidateSize(); }).observe($("map"));
@@ -544,12 +551,15 @@
   }
 
   function ramp() { return [css("--clear"), css("--r1"), css("--r2"), css("--r3")]; }
+  function oldRamp() { return [css("--o1"), css("--o2"), css("--o3")]; }
 
   function drawMap() {
     if (!state.map || !state.data) return;
-    var d = state.data, day = state.day, cell = d.settings.cell_deg, pts, spread = 1;
+    var d = state.data, day = state.day, cell = d.settings.cell_deg, pts = [], old = [], spread = 1;
     if (day === 0) {
-      pts = d.detections.map(function (c) { return [c[0], c[1], 1]; });  // each at its cell center
+      // Each at its cell center. Patches seen earlier in the week are drawn in gray: they have likely moved.
+      var split = dated();
+      d.detections.forEach(function (c) { (!split || recent(c) ? pts : old).push([c[0], c[1], 1]); });
     } else {
       // Particles carry the detected area: each stands for n cells. When n > 1 its
       // kernel is widened so the same area spreads over a larger footprint.
@@ -557,6 +567,7 @@
       spread = Math.sqrt(Math.max(1, n));
       pts = driftHidden() ? [] : d.forecast[day].filter(function (p) { return p[2] === 0; }).map(function (p) { return [p[0], p[1], Math.min(1, n)]; });
     }
+    state.layers.older.setData(old, cell, oldRamp(), 1);
     state.layers.density.setData(pts, cell, ramp().slice(1), spread);
     drawMarkers();
   }

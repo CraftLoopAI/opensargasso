@@ -1,13 +1,17 @@
 """Minimal ERDDAP griddap client. Standard library only.
 
-ERDDAP serves gridded data as plain CSV, so no netCDF stack is needed.
+ERDDAP serves gridded data as plain text, CSV or OPeNDAP's ASCII form (.asc),
+so no netCDF stack is needed. The .asc answer is about a fifth the size of the
+CSV, with the same values.
 """
 from __future__ import annotations
 
 import csv
+import datetime as dt
 import io
 import math
 import random
+import re
 import time as _time
 import urllib.error
 import urllib.parse
@@ -53,8 +57,8 @@ class Grid:
         return NAN if ij is None else self.data[var][ij[1]][ij[0]]
 
 
-def griddap_url(base, dataset, variables, bbox, time="last", stride=1, descending_lat=False):
-    """Build a griddap CSV request for a bounding box.
+def griddap_url(base, dataset, variables, bbox, time="last", stride=1, descending_lat=False, fmt="csv"):
+    """Build a griddap request for a bounding box, as CSV or, with fmt="asc", OPeNDAP text.
 
     `time` is "last", an ISO timestamp, a (start, step, end) range where end
     may be "last", or None for datasets without a time axis.
@@ -67,7 +71,7 @@ def griddap_url(base, dataset, variables, bbox, time="last", stride=1, descendin
     else:
         t = f"[({time})]" if time else ""
     query = ",".join(f"{v}{t}{lat}{lon}" for v in variables)
-    return f"{base.rstrip('/')}/griddap/{dataset}.csv?" + urllib.parse.quote(query, safe="(),:.-_")
+    return f"{base.rstrip('/')}/griddap/{dataset}.{fmt}?" + urllib.parse.quote(query, safe="(),:.-_")
 
 
 def dataset_page(source: dict) -> str:
@@ -117,6 +121,52 @@ def _to_grid(rows, variables) -> Grid:
         for v, x in zip(variables, vals):
             data[v][j][i] = x
     return Grid(lats=lats, lons=lons, data=data, time=when)
+
+
+def parse_asc(text: str, variables) -> Grid:
+    """Parse ERDDAP's OPeNDAP text answer (.asc) for one time step, like parse_csv."""
+    a = parse_ascii(text)
+    lats, lons = a[f"{variables[0]}.latitude"], a[f"{variables[0]}.longitude"]
+    data = {}
+    for v in variables:
+        rows = a[f"{v}.{v}"]  # one row of longitudes per latitude
+        if len(rows) != len(lats):
+            raise ValueError(f"{v}: expected one time step of {len(lats)} rows, got {len(rows)}")
+        data[v] = rows
+    if len(lats) > 1 and lats[0] > lats[-1]:  # stored ascending, like parse_csv
+        lats, data = lats[::-1], {v: rows[::-1] for v, rows in data.items()}
+    seconds = a.get(f"{variables[0]}.time")
+    when = dt.datetime.fromtimestamp(seconds[0], dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ") if seconds else None
+    return Grid(lats=lats, lons=lons, data=data, time=when)
+
+
+def parse_ascii(text: str) -> dict:
+    """{name: values} from an OPeNDAP ASCII response (THREDDS .ascii, ERDDAP .asc).
+
+    1-D variables give a list of numbers; arrays give one list per row (the
+    last dimension), in row order. Grid members are named "grid.member".
+    """
+    if text.lstrip().startswith("Error {"):
+        raise RuntimeError(" ".join(text.split())[:300])
+    body = re.split(r"\n-{10,}\n", text, maxsplit=1)[-1]                 # after the line of dashes
+    out, name = {}, None
+    for line in body.splitlines():
+        line = line.strip()
+        if not line:
+            name = None
+            continue
+        header = re.fullmatch(r"([\w.\-]+)((?:\[\d+\])+)", line)
+        if header:
+            name = header.group(1)
+            out[name] = []
+            continue
+        if name is None:
+            continue
+        if line.startswith("["):                                          # "[t][h][i], v, v, ..." one row
+            out[name].append([_num(v) for v in line.split(",")[1:]])
+        else:                                                             # a 1-D variable's values
+            out[name].extend(_num(v) for v in line.split(","))
+    return out
 
 
 def _num(s: str) -> float:
@@ -182,14 +232,15 @@ def _retry_after(e: urllib.error.HTTPError) -> float:
         return 0.0
 
 
-def fetch_grid(source: dict, bbox: dict, stride: int = 1, time="last", fetch=fetch_text) -> Grid:
-    """Fetch one source for a bounding box.
+def fetch_grid(source: dict, bbox: dict, stride: int = 1, time="last", fetch=fetch_text, fmt="csv") -> Grid:
+    """Fetch one source for a bounding box, as CSV or, with fmt="asc", the smaller OPeNDAP text.
 
     Latitude can be stored ascending or descending depending on the dataset,
     and ERDDAP rejects a request in the wrong order: a source that records
     `lat_descending` is asked in that order only, otherwise both are tried.
     """
-    return _request(source, bbox, time if source.get("has_time", True) else None, stride, fetch, parse_csv)
+    return _request(source, bbox, time if source.get("has_time", True) else None, stride, fetch,
+                    parse_asc if fmt == "asc" else parse_csv, fmt)
 
 
 def fetch_series(source: dict, bbox: dict, start: str, end: str = "last", time_step: int = 1,
@@ -198,7 +249,7 @@ def fetch_series(source: dict, bbox: dict, start: str, end: str = "last", time_s
     return _request(source, bbox, (start, time_step, end), stride, fetch, parse_series)
 
 
-def _request(source, bbox, time, stride, fetch, parse):
+def _request(source, bbox, time, stride, fetch, parse, fmt="csv"):
     if source.get("lon360"):  # dataset stores longitude 0 to 360: ask in its terms, answer in +/-180
         bbox = {**bbox, "west": bbox["west"] % 360, "east": bbox["east"] % 360}
         if bbox["west"] > bbox["east"]:
@@ -206,7 +257,7 @@ def _request(source, bbox, time, stride, fetch, parse):
     error = None
     for descending in [source["lat_descending"]] if "lat_descending" in source else (False, True):
         url = griddap_url(source["base"], source["dataset"], source["variables"], bbox,
-                          time=time, stride=stride, descending_lat=descending)
+                          time=time, stride=stride, descending_lat=descending, fmt=fmt)
         try:
             result = parse(fetch(url), source["variables"])
         except urllib.error.HTTPError as e:
