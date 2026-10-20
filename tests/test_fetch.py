@@ -83,36 +83,60 @@ def test_retries_stop_at_the_deadline(monkeypatch):
 
 
 def test_second_run_when_the_first_had_no_fresh_wind(tmp_path):
-    today, nothing_new = dt.date(2026, 10, 15), lambda url: False
-    assert rerun.needed(tmp_path, today, nothing_new)[0] is True                       # no run yet today
+    today, nothing_new, same_image = dt.date(2026, 10, 15), lambda url: False, lambda: "2026-10-14T12:00:00Z"
+    assert rerun.needed(tmp_path, today, nothing_new, same_image)[0] is True            # no run yet today
     for wind, go in (("forecast", False), ("cached", True), ("constant", True)):
-        (tmp_path / "2026-10-15.json").write_text(json.dumps({"date": "2026-10-15", "wind": wind, "sir_date": "2026-10-14"}))
-        assert rerun.needed(tmp_path, today, nothing_new)[0] is go, wind
+        (tmp_path / "2026-10-15.json").write_text(json.dumps({"date": "2026-10-15", "wind": wind, "afai_time": "2026-10-14T12:00:00Z", "sir_date": "2026-10-14"}))
+        assert rerun.needed(tmp_path, today, nothing_new, same_image)[0] is go, wind
     (tmp_path / "2026-10-15.json").write_text("{not json")
-    assert rerun.needed(tmp_path, today, nothing_new)[0] is True
+    assert rerun.needed(tmp_path, today, nothing_new, same_image)[0] is True
+
+
+def down(*args):
+    raise OSError("timed out")
 
 
 def test_second_run_when_noaa_posted_a_newer_sir_report(tmp_path):
-    today, asked = dt.date(2026, 10, 15), []
-    history = lambda sir_date: (tmp_path / "2026-10-15.json").write_text(json.dumps({"wind": "forecast", "sir_date": sir_date}))  # noqa: E731
+    today, asked, image = dt.date(2026, 10, 15), [], lambda: "2026-10-14T12:00:00Z"
+    history = lambda sir_date: (tmp_path / "2026-10-15.json").write_text(json.dumps({"wind": "forecast", "afai_time": "2026-10-14T12:00:00Z", "sir_date": sir_date}))  # noqa: E731
     posted = lambda *days: lambda url: asked.append(url[-13:-4]) or url[-12:-4] in days  # noqa: E731
 
     history("2026-10-13")
-    go, why = rerun.needed(tmp_path, today, posted("20261014"))
+    go, why = rerun.needed(tmp_path, today, posted("20261014"), image)
     assert go is True and "2026-10-14" in why
     assert asked == ["_20261014"]                         # yesterday's at most: a day's report comes out the next day
-    assert rerun.needed(tmp_path, today, posted())[0] is False
-
-    def down(url):
-        raise OSError("timed out")
-    assert rerun.needed(tmp_path, today, down)[0] is False   # no answer: a second run would get no more
+    assert rerun.needed(tmp_path, today, posted(), image)[0] is False
+    assert rerun.needed(tmp_path, today, down, image)[0] is False   # no answer: a second run would get no more
 
     asked.clear()
     history("2026-10-14")
-    assert rerun.needed(tmp_path, today, posted("20261014"))[0] is False and asked == []   # it already has the newest
+    assert rerun.needed(tmp_path, today, posted("20261014"), image)[0] is False and asked == []   # it already has the newest
 
     history(None)                                         # the first run got no SIR report at all
-    assert rerun.needed(tmp_path, today, posted("20261011"))[0] is True
+    assert rerun.needed(tmp_path, today, posted("20261011"), image)[0] is True
+
+
+def test_second_run_when_a_newer_satellite_image_is_out(tmp_path):
+    today, nothing_new = dt.date(2026, 10, 15), lambda url: False
+    (tmp_path / "2026-10-15.json").write_text(json.dumps({"wind": "forecast", "afai_time": "2026-10-13T12:00:00Z", "sir_date": "2026-10-13"}))
+    go, why = rerun.needed(tmp_path, today, nothing_new, lambda: "2026-10-14T12:00:00Z")   # the first ran before the night's image
+    assert go is True and "satellite image of 2026-10-14" in why
+    assert rerun.needed(tmp_path, today, nothing_new, lambda: "2026-10-13T12:00:00Z")[0] is False
+    go, why = rerun.needed(tmp_path, today, nothing_new, down)
+    assert go is False and "ERDDAP" in why
+    assert rerun.needed(tmp_path, today, lambda url: url.endswith("_20261014.kmz"), down)[0] is True   # one server is enough
+
+
+def test_newest_satellite_image_is_read_from_erddaps_time_axis():
+    asked = []
+
+    def answer(url, timeout, waits):
+        asked.append(url)
+        return "time\nUTC\n2026-10-19T12:00:00Z\n"
+    assert rerun.latest_image(answer) == "2026-10-19T12:00:00Z"
+    assert asked[0].endswith("/griddap/noaa_aoml_atlantic_oceanwatch_AFAI_7D.csv?time%5Blast%5D")
+    with pytest.raises(ValueError):
+        rerun.latest_image(lambda url, timeout, waits: "<html>maintenance</html>")
 
 
 def test_probe_reports_answers_refusals_and_silence():

@@ -32,7 +32,7 @@ On macOS with Python from python.org, run `Install Certificates.command` in the 
 1. Push this folder to a GitHub repository.
 2. In **Settings > Pages**, set **Source** to **GitHub Actions**.
 3. In `site/config.js`, set `repo` to your `owner/repo`.
-4. In **Actions**, run **Daily update** once by hand. After that it runs every day at 11:23 UTC, and again at 16:53 UTC when there is something new.
+4. In **Actions**, run **Daily update** once by hand. After that it runs every day at 07:23 UTC, and again at 16:53 UTC when there is something new.
 5. Create two issue labels: `sargassum-report` and `report-approved`.
 6. Optional: deploy the sighting relay in `worker/` (free Cloudflare account) so visitors can report without a GitHub account. See [worker/README.md](worker/README.md).
 
@@ -62,7 +62,7 @@ More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/DATA_SOURCES.md
 | Pipeline logic (detect, drift, risk, reports) | Unit tested, runs on sample data |
 | Dataset IDs (AFAI, currents, land mask) | Checked against the NOAA servers in October 2026 |
 | Live download | Works. First run 12 October 2026: AFAI 1 day old, currents 2 days old. Response formats pinned by `tests/fixtures/` |
-| Daily update | Runs on GitHub Actions every day at 11:23 UTC since 14 October 2026 and deploys the site to GitHub Pages. Each run commits only the day's small history file; `latest.json` goes to the site, not into git. A second run at 16:53 UTC goes ahead when NOAA has posted a newer SIR report since (each day's report comes out the next afternoon, 13:09 to 16:08 UTC in October 2026) or the first run had no fresh wind forecast (20 October 2026). GitHub started the scheduled runs 2 to 6 hours late from 15 to 20 October 2026, so the times are approximate |
+| Daily update | Runs on GitHub Actions every day at 07:23 UTC (since 21 October 2026; 11:23 UTC from 14 October), after the night's satellite image, and deploys the site to GitHub Pages. Each run commits only the day's small history file; `latest.json` goes to the site, not into git. A second run at 16:53 UTC goes ahead when NOAA has posted a newer satellite image or SIR report since (each day's report comes out the next afternoon, 13:09 to 16:08 UTC in October 2026) or the first run had no fresh wind forecast (20 October 2026). GitHub started the scheduled runs 2 to 6 hours late from 15 to 20 October 2026, so the times are approximate |
 | Land mask | OpenStreetMap coastline in 220 m cells, stored in `regions/land/` (13 October 2026). Simpson Bay Lagoon, Oyster Pond and Pinel are resolved, and the daily run needs no land download (3 seconds instead of 80) |
 | Detection | AFAI at full resolution (0.015 degrees, about 1.6 km) since 13 October 2026. Pixels that touch land are skipped (Tintamarre was flagged as sargassum), and so are pixels within about 3 km of land the AFAI product masked, where coastal glare looks like algae. Real mats that close to the coast are missed. Since 20 October 2026 each detection is dated from the seven daily images behind the 7-day composite, and the map draws those seen 4 to 7 days before the image date in gray (on 19 October 2026, 60% of detections were that old). The drift forecast still starts them all on the image date |
 | Currents | NOAA AOML geostrophic currents, 1 to 2 days old in October 2026. Kept after a comparison with SMOC total currents via Open-Meteo (13 October 2026); see `docs/DATA_SOURCES.md` |

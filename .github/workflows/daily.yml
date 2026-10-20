@@ -1,8 +1,10 @@
 name: Daily update
 on:
   schedule:
-    - cron: "23 11 * * *"   # once a day, 11:23 UTC
-    - cron: "53 16 * * *"   # second run: goes ahead only if the first had no fresh wind forecast or NOAA has posted a newer SIR report
+    # GitHub often starts scheduled runs 2 to 6 hours late. Each goes ahead only if it is the day's
+    # first, or the first had no fresh wind forecast, or NOAA has since posted newer data (pipeline/rerun.py).
+    - cron: "23 7 * * *"    # 07:23 UTC: the night's satellite image, for the morning
+    - cron: "53 16 * * *"   # 16:53 UTC: the SIR report NOAA posts in the afternoon
   workflow_dispatch:
 permissions:
   contents: write
@@ -26,11 +28,10 @@ jobs:
       - name: Decide whether to run
         id: gate
         env:
-          SCHEDULE: ${{ github.event.schedule }}
+          EVENT: ${{ github.event_name }}
         run: |
-          # NOAA posts each SIR report the next afternoon, after the morning run; a new run also usually
-          # gets a new runner IP, which often gets past a server that blocked the first one.
-          if [ "$SCHEDULE" = "53 16 * * *" ]; then python -m pipeline.rerun >> "$GITHUB_OUTPUT"; else echo "go=true" >> "$GITHUB_OUTPUT"; fi
+          # a run started by hand always goes ahead
+          if [ "$EVENT" = "schedule" ]; then python -m pipeline.rerun >> "$GITHUB_OUTPUT"; else echo "go=true" >> "$GITHUB_OUTPUT"; fi
       - name: Restore the last good wind forecast
         if: steps.gate.outputs.go == 'true'
         uses: actions/cache@v4   # reused when every wind source fails; saved again after the run
