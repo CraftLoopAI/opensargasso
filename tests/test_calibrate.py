@@ -43,16 +43,41 @@ def test_cached_inputs_redo_detections_when_the_afai_settings_change(tmp_path, m
     import datetime as dt
     import json
     import types
-    from pipeline import erddap, run
+    from pipeline import erddap, run, sources
     region = {"bbox": BBOX, "afai": {"stride": 1, "threshold": 0.0005, "background_block_deg": 0.75}, "drift": {"days": 7}}
     old = {"afai_time": "t", "cell": 0.03, "stats": {}, "detections": [[-63.0, 18.0, 0.001]], "currents": None, "wind": ["kept"]}
     (tmp_path / "inputs_20260708.json").write_text(json.dumps(old))   # written at stride 2, before settings were recorded
     fetched = []
-    monkeypatch.setattr(calibrate.erddap, "fetch_grid", lambda *a, **k: fetched.append(k["stride"]) or erddap.Grid(
-        [18.0, 18.015], [-63.0, -62.985], {"AFAI": [[0.0, 0.0], [0.0, 0.0]]}, time="t2"))
+
+    def grid(source, bbox, stride, time, fmt="csv"):
+        fetched.append((source["dataset"], stride))
+        return erddap.Grid([18.0, 18.015], [-63.0, -62.985], {"AFAI": [[0.0, 0.0], [0.0, 0.001]]}, time=time)
+    monkeypatch.setattr(calibrate.erddap, "fetch_grid", grid)
     monkeypatch.setattr(calibrate.detect, "detect", lambda *a, **k: ([(-62.985, 18.015, 0.002)], {"detected": 1}))
-    monkeypatch.setattr(run, "fetch_wind", lambda *a, **k: (_ for _ in ()).throw(AssertionError("wind refetched")))
+
+    def wind(bbox, start, end="last"):  # only the six days before the date: the week after is kept
+        assert (start, end) == ("2026-07-02T12:00:00Z", "2026-07-08T12:00:00Z"), "wind refetched"
+        return None, [erddap.Grid([18.0], [-63.0], {}, time=t) for t in ("2026-07-02T12:00:00Z", "2026-07-08T12:00:00Z")], []
+    monkeypatch.setattr(run, "fetch_wind", wind)
     land = types.SimpleNamespace(is_land=lambda lon, lat: False)
     j = calibrate.inputs(dt.date(2026, 7, 8), region, land, tmp_path, pause=0)
-    assert fetched == [1] and abs(j["cell"] - 0.015) < 1e-9 and j["detections"] == [[-62.985, 18.015, 0.002]] and j["wind"] == ["kept"]
-    assert calibrate.inputs(dt.date(2026, 7, 8), region, land, tmp_path, pause=0) == j and fetched == [1]   # now cached
+    assert fetched == [(sources.AFAI["dataset"], 1)] + [(sources.AFAI_DAILY["dataset"], 1)] * 7
+    assert abs(j["cell"] - 0.015) < 1e-9 and j["detections"] == [[-62.985, 18.015, 0.002]] and j["wind"] == ["kept"]
+    assert j["seen"] == [0] and j["fresh"] == [[-62.985, 18.015]] and [g["time"] for g in j["wind_before"]] == ["2026-07-02T12:00:00Z"]
+    assert calibrate.inputs(dt.date(2026, 7, 8), region, land, tmp_path, pause=0) == j and len(fetched) == 8   # now cached
+
+
+def test_dating_by_the_highest_daily_value_matches_the_daily_job():
+    from pipeline import detect, erddap
+    nan = float("nan")
+    values = [[[0.001, nan], [nan, 0.003]], [[0.002, 0.004], [nan, 0.003]], [[0.002, nan], [nan, nan]]]
+    daily = [erddap.Grid([18.0, 18.015], [-63.0, -62.985], {"AFAI": v}) for v in values]
+    week = erddap.Grid([18.0, 18.015], [-63.0, -62.985], {"AFAI": [[0.002, 0.004], [nan, 0.003]]})   # the highest of each pixel
+    found = [(-63.0, 18.0, 1.0), (-62.985, 18.0, 1.0), (-63.0, 18.015, 1.0), (-62.985, 18.015, 1.0)]
+    assert calibrate.seen_by_max(found, daily) == detect.seen_days(found, week, daily) == [1, 1, None, 0]
+
+
+def test_share_near_counts_points_within_reach():
+    sargassum = [(-63.0, 18.0), (-62.5, 18.5)]
+    points = [(-63.0, 18.03), (-62.95, 18.0), (-62.5, 18.5), (-62.0, 18.0)]   # 3.3 km, 5.3 km, on it, far
+    assert calibrate.share_near(points, sargassum, 5) == 0.5 and math.isnan(calibrate.share_near([], sargassum, 5))

@@ -4,7 +4,7 @@ import math
 
 import pytest
 
-from pipeline import detect, erddap, run, sample, sources
+from pipeline import detect, drift, erddap, run, sample, sources
 
 NAN = float("nan")
 
@@ -92,3 +92,26 @@ def test_published_detections_carry_the_day_they_were_seen():
     assert {len(d) for d in unknown} == {4} and {d[3] for d in unknown} == {None}   # no daily images: no dates
     seen = run.build(region, afai, currents, land, [], True, now, daily=[afai])["detections"]
     assert {d[3] for d in seen} == {0}                          # every value is in the newest image
+
+
+BBOX = {"west": -64.0, "east": -62.0, "south": 17.0, "north": 19.0}
+EAST = lambda lon, lat: (0.3, 0.0)  # noqa: E731
+
+
+def test_a_patch_seen_earlier_drifts_from_that_day():
+    still = drift.simulate([(-63.5, 18.0)], EAST, lambda lon, lat: False, BBOX, days=3, windage=0, diffusion_deg=0)[0]
+    seen = drift.simulate([(-63.5, 18.0, 2)], EAST, lambda lon, lat: False, BBOX, days=1, windage=0, diffusion_deg=0)[0]
+    assert len(seen) == 2 and seen[0] == still[2] and seen[1] == still[3]   # day 0 is where it has got to
+    undated = drift.simulate([(-63.5, 18.0, None)], EAST, lambda lon, lat: False, BBOX, days=3, windage=0, diffusion_deg=0)[0]
+    assert undated == still
+    reef = lambda lon, lat: lon > -63.3  # noqa: E731 - about a day east of the seed
+    ashore = drift.simulate([(-63.5, 18.0, 3)], EAST, reef, BBOX, days=2, windage=0, diffusion_deg=0)[0]
+    assert [state for _, _, state in ashore] == [drift.BEACHED] * 3     # it landed before day 0
+
+
+def test_seeds_carry_the_day_their_detection_was_seen():
+    import random
+    found = [(-63.0, 18.0, 0.0025), (-62.5, 18.5, 0.0005)]
+    plain = drift.seed_particles(found, 10, random.Random(1), 0.015)
+    dated = drift.seed_particles([(*d, k) for d, k in zip(found, (4, None))], 10, random.Random(1), 0.015)
+    assert [s[:2] for s in dated] == plain and [s[2] for s in dated] == [4, 4, 4, None]

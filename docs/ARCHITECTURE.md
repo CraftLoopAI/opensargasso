@@ -88,7 +88,7 @@ A maintainer checks the issue and adds the label `report-approved`. The workflow
 ## Known limits
 
 - Geostrophic currents are coarse (0.2 degrees) and miss nearshore flow, tides and wind-driven surface currents, and one day of currents is used for the whole week.
-- The 7-day AFAI composite shows each patch where it was seen, up to 6 days before the image date. The map draws the 4 earliest days in gray, but the drift forecast starts every patch on the image date, so it counts a moving mat several times along its track. Clouds leave gaps.
+- The 7-day AFAI composite shows each patch where it was seen, up to 6 days before the image date. The map draws the 4 earliest days in gray, but the drift forecast starts every patch on the image date, so it counts a moving mat several times along its track. Starting each from the day it was seen did no better in the backtest (`CALIBRATION.md`, section 5). Clouds leave gaps.
 - The land mask has cells of about 220 m, so the smallest islets and channels can be missed.
 - GFS wind is on a 0.5 degree grid (about 55 km), so wind effects around the island itself are missed.
 - Beach levels repeat the latest SIR report for the whole week, so sargassum on its way in does not show until NOAA's next report.
