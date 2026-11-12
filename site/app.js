@@ -64,6 +64,11 @@
   function fmtDay(k, opts) { opts.timeZone = "UTC"; return new Date(state.base + k * DAY_MS).toLocaleDateString(state.lang, opts); }
   function longDay(k) { return fmtDay(k, { weekday: "long", day: "numeric", month: "long" }); }
   function seenOn(k) { return fmtDay(-k, { day: "numeric", month: "short" }); }  // k days before the image date
+  /* A beach's sighting for a day is [amount, date]: the level shown is at least the amount seen. */
+  function sightingText(sg) {
+    var d = new Date(sg[1]), day = isNaN(d) ? sg[1] : d.toLocaleDateString(state.lang, { day: "numeric", month: "short", timeZone: "UTC" });
+    return t("sightingOn", { d: day, amount: t("amounts")[sg[0]] });
+  }
   /* A detection's 4th value is how many days before the image date it was seen, or null. */
   function dated() { return !!state.data && state.data.detections.some(function (c) { return c[3] != null; }); }
   function recent(c) { return c[3] != null && c[3] < RECENT_DAYS; }
@@ -88,6 +93,7 @@
     $("place").textContent = state.data ? state.data.region.name : "";
     $("tagline").textContent = t("tagline");
     $("h-outlook").textContent = t("outlook"); $("outlook-help").textContent = outlookHelp();
+    renderCoastNote();
     $("h-reports").textContent = t("reports");
     $("h-data").textContent = t("data");
     $("dl-json").textContent = t("json"); $("dl-reports").textContent = t("reportsFile"); $("to-methods").textContent = t("moreMethods");
@@ -126,15 +132,27 @@
   function sirInfo() { var s = state.data && state.data.sources.sir; return s && s.fallback === false ? s : null; }
   function fromSir() { return !!sirInfo(); }
   function outlookHelp() { var s = sirInfo(); return s ? t("outlookSir", { d: fmtDate(s.date) }) : t("outlookModel"); }
+  /* Next to the levels, not only under the map: a beach rated Low can have sargassum the satellites cannot see. */
+  function renderCoastNote() {
+    var p = $("outlook-coast"), go = el("button", "link", t("reportBtn")); p.textContent = t("outlookCoast") + " "; go.type = "button";
+    go.addEventListener("click", function () {
+      if (reportConfig() && $("report-form").hidden) toggleReport();
+      scrollToEl($("h-reports"));
+    });
+    p.appendChild(go);
+  }
   function unc(k) { return k >= UNCERTAIN_FROM; }
 
   function renderHeadline() {
     var d = state.data;
     if (!d) { $("headline").textContent = t("title"); return; }
     if (expired()) { $("headline").textContent = t("headlineExpired", { d: fmtDate(d.generated) }); return; }
-    var n = d.sites.filter(function (s) { return outlook(s).first >= 0; }).length;
+    var hit = d.sites.filter(function (s) { return outlook(s).first >= 0; }), n = hit.length, from = horizon();
+    // A sighting of Moderate or Heavy sets Medium or High by itself, so the headline cannot credit NOAA alone.
+    var sighted = hit.some(function (s) { return (s.sighting || []).slice(from).some(function (x) { return x && x[0] >= 2; }); });
     var noaa = fromSir();
-    $("headline").textContent = n ? t(noaa ? "headline" : "headlineModel", { n: n, total: d.sites.length }) : t(noaa ? "headlineNone" : "headlineModelNone");
+    $("headline").textContent = n ? t(sighted ? "headlineSighting" : noaa ? "headline" : "headlineModel", { n: n, total: d.sites.length })
+      : t(noaa ? "headlineNone" : "headlineModelNone");
   }
 
   function renderNotices() {
@@ -237,13 +255,16 @@
   }
 
   function siteRow(s, day) {
-    var b = el("button", "bd-row" + (s.id === state.sel ? " on" : "")), levels = t("levels"); b.type = "button"; b.dataset.site = s.id;
-    b.appendChild(el("span", "nm", s.name));
+    var b = el("button", "bd-row" + (s.id === state.sel ? " on" : "")), levels = t("levels"), seen = s.sighting || []; b.type = "button"; b.dataset.site = s.id;
+    var nm = el("span", "nm"); nm.appendChild(el("span", "nmt", s.name));
+    if (seen[day]) { var sg = el("span", "sg"); sg.appendChild(el("i", "l" + seen[day][0])); sg.appendChild(document.createTextNode(sightingText(seen[day]))); nm.appendChild(sg); }
+    b.appendChild(nm);
     var week = [];
     s.risk.forEach(function (r, k) {
-      var c = el("span", "c" + (k === day ? " sel" : "") + (unc(k) ? " unc" : "")), i = el("i", "l" + r);
-      c.title = longDay(k) + ": " + levels[r]; c.appendChild(i); b.appendChild(c);
-      week.push(fmtDay(k, { weekday: "short" }).replace(/\.$/, "") + " " + dayNum(k) + ": " + levels[r]);
+      var c = el("span", "c" + (k === day ? " sel" : "") + (unc(k) ? " unc" : "")), i = el("i", "l" + r + (seen[k] ? " sg" : ""));
+      var note = seen[k] ? " (" + sightingText(seen[k]) + ")" : "";
+      c.title = longDay(k) + ": " + levels[r] + note; c.appendChild(i); b.appendChild(c);
+      week.push(fmtDay(k, { weekday: "short" }).replace(/\.$/, "") + " " + dayNum(k) + ": " + levels[r] + note);
     });
     var lv = el("span", "lv"); lv.appendChild(el("i", "chip l" + s.risk[day])); lv.appendChild(document.createTextNode(levels[s.risk[day]]));
     b.appendChild(lv);
@@ -586,10 +607,10 @@
         .bindTooltip(t("legendReport") + ": " + t("amounts")[p.level] + ", " + fmtDate(p.observed)).addTo(Lr.reports);
     });
     d.sites.forEach(function (s) {
-      var r = s.risk[day], on = s.id === state.sel;
+      var r = s.risk[day], on = s.id === state.sel, sg = (s.sighting || [])[day];
       state.markers[s.id] = L.circleMarker([s.lat, s.lon], {
         radius: on ? size + 3 : size, color: on ? ink : panel, weight: on ? 3 : size > 4 ? 2.5 : 1.5, fillColor: colors[r], fillOpacity: 1
-      }).bindTooltip(s.name + ": " + levels[r], { direction: "top", offset: [0, -8] })
+      }).bindTooltip(s.name + ": " + levels[r] + (sg ? " (" + sightingText(sg) + ")" : ""), { direction: "top", offset: [0, -8] })
         .on("click", function () { focusSite(s, true); })
         .addTo(Lr.sites);
     });

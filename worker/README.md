@@ -1,6 +1,6 @@
 # Sighting relay
 
-The website's sighting form posts here. The Worker checks the Cloudflare Turnstile captcha, validates the report and opens the same GitHub issue as the sighting issue form, labeled `sargassum-report`. A maintainer approves it with `report-approved` as usual, and `.github/workflows/report.yml` publishes it. Reporters need no GitHub account.
+The website's sighting form posts here. The Worker checks the Cloudflare Turnstile captcha, validates the report and opens the same GitHub issue as the sighting issue form, labeled `sargassum-report`. A maintainer approves it with `report-approved` as usual, and `.github/workflows/report.yml` publishes it and starts the daily update, which puts it on the site. Reporters need no GitHub account.
 
 Until the relay is set up, the site shows the GitHub issue form button instead.
 

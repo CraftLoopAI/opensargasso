@@ -83,7 +83,9 @@ Two ways in, one review:
 - **The form on the site**, no account needed. It posts to a small Cloudflare Worker (`worker/`), which checks a Turnstile captcha, validates the fields and opens a GitHub issue in exactly the format the issue form produces, labeled `sargassum-report`. Notes are made one line, without heading marks or @mentions, so a note cannot add fields or notify people. The form appears once `site/config.js` names the relay; until then the site links to the issue form.
 - **The GitHub issue form**, for people with an account.
 
-A maintainer checks the issue and adds the label `report-approved`. The workflow validates the report, appends it to `reports.geojson` and closes the issue; a rejected report gets a comment with the reason. An empty date becomes the day of filing on the island (UTC offset in the region file), and dates after filing are rejected. Moderation is built in. The Worker runs on Cloudflare's free plan; approved reports, including notes, are public.
+A maintainer checks the issue and adds the label `report-approved`. The workflow validates the report, appends it to `reports.geojson`, starts the daily update so the site shows it within minutes, and closes the issue; a rejected report gets a comment with the reason. An empty date becomes the day of filing on the island (UTC offset in the region file), and dates after filing are rejected. Moderation is built in. The Worker runs on Cloudflare's free plan; approved reports, including notes, are public.
+
+Satellites cannot see sargassum on the beach or within about 3 km of it, so a sighting counts in the beach levels (`run.with_sightings`, since 12 November 2026). On the day it was made and the two days after, a sighting picked from the beach list raises that beach's level to the amount seen: Light is Warning, Moderate Medium, Heavy High. It never lowers a level; when several count, the newest does. A sighting at another place, given by coordinates, appears on the map only. Each beach in `latest.json` carries `sighting`, per day `[amount, date]` or `null`, and the day's history file lists the beaches a sighting counted for under `sightings`.
 
 ## Known limits
 
@@ -92,4 +94,5 @@ A maintainer checks the issue and adds the label `report-approved`. The workflow
 - The land mask has cells of about 220 m, so the smallest islets and channels can be missed.
 - GFS wind is on a 0.5 degree grid (about 55 km), so wind effects around the island itself are missed.
 - Beach levels repeat the latest SIR report for the whole week, so sargassum on its way in does not show until NOAA's next report.
+- SIR and our detections both come from satellites, which see nothing on the beach and little within about 3 km of it: near Maho Beach on 7 November 2026, the satellite product left most sea pixels within 5 km without data. Only sightings show what has landed.
 - The model's levels are particle counts, not tonnage, fitted against SIR over one season.

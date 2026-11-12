@@ -26,6 +26,7 @@ MAP_PARTICLES = 2500  # particles published for the map; the counts use every si
 WIND_BUDGET_S = 300   # per wind source, so a stuck server cannot use up the job's 30 minutes
 CLOUD_RADIUS_KM = 150  # area around the island where cloud gaps matter for the next days
 DAILY_BUDGET_S = 180   # for the seven daily satellite images that date the detections
+SIGHTING_DAYS = 3      # a sighting counts on its day and the two after: sargassum stays on a beach for days
 
 
 def load_region(region_id: str) -> dict:
@@ -243,8 +244,41 @@ def beach_levels(model_sites, sir_levels, days: int):
     return out
 
 
+def load_sightings(path: pathlib.Path) -> list:
+    """Approved sightings from the beach (`reports.geojson`), or none if the file is missing or unreadable."""
+    try:
+        return json.loads(path.read_text(encoding="utf-8")).get("features") or []
+    except (OSError, ValueError, AttributeError):
+        return []
+
+
+def with_sightings(sites, sightings, start: dt.date, days: int):
+    """Satellites cannot see sargassum on the beach, so a sighting there counts. On the day it
+    was made and the SIGHTING_DAYS - 1 days after, it raises its beach's level to the amount
+    seen (Light is Warning, Moderate Medium, Heavy High) and never lowers it. `sighting` gives,
+    for each day, the newest sighting that counts as [amount, date], or None."""
+    seen = {}
+    for f in sightings:
+        p = f.get("properties") or {}
+        try:
+            day, amount = dt.date.fromisoformat(p["observed"]), int(p["level"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if 0 <= amount <= 3:
+            seen.setdefault(p.get("beach"), []).append((day, p.get("id") or 0, amount))
+    out = []
+    for s in sites:
+        mine = sorted(seen.get(s["name"], []))
+        week = []
+        for k in range(days + 1):
+            counts = [x for x in mine if 0 <= (start + dt.timedelta(days=k) - x[0]).days < SIGHTING_DAYS]
+            week.append([counts[-1][2], counts[-1][0].isoformat()] if counts else None)
+        out.append({**s, "risk": [max(r, w[0]) if w else r for r, w in zip(s["risk"], week)], "sighting": week})
+    return out
+
+
 def build(region: dict, afai, currents, land, notes, is_sample: bool, now: dt.datetime, wind=None, sir_levels=None,
-          wind_from=None, context=None, daily=None) -> dict:
+          wind_from=None, context=None, daily=None, sightings=()) -> dict:
     a, d = region["afai"], region["drift"]
     is_land = drift.make_land_test(land)
     cell = abs(afai.dlon)
@@ -261,6 +295,7 @@ def build(region: dict, afai, currents, land, notes, is_sample: bool, now: dt.da
         region["bbox"], days=d["days"], step_hours=d["step_hours"], windage=d["windage"],
         wind=drift.make_wind(wind, parse_time(afai.time) or now, d["wind_ms"]), diffusion_deg=d["diffusion_deg"], rng=rng)
     sites = beach_levels(risk.site_risk(tracks, region["sites"], region["risk"], d["days"], weight), sir_levels, d["days"])
+    sites = with_sightings(sites, sightings, (parse_time(afai.time) or now).date(), d["days"])  # day 0 is the image date
     shown = tracks[::-(-len(tracks) // MAP_PARTICLES)] if tracks else []  # every k-th track, at most MAP_PARTICLES
     forecast = [[[round(tr[day][0], 3), round(tr[day][1], 3), tr[day][2]] for tr in shown if tr[day][2] != drift.LEFT]
                 for day in range(d["days"] + 1)]
@@ -308,7 +343,8 @@ def write_outputs(result: dict, out: pathlib.Path, now: dt.datetime, history: bo
                "wind": "constant" if w.get("fallback") else "cached" if w.get("cached") else "forecast",
                "sir_date": result["sources"].get("sir", {}).get("date"), "detected": result["stats"]["detected"],
                "sites": {s["id"]: s["risk"] for s in result["sites"]},
-               "level_source": {s["id"]: s.get("source", "model") for s in result["sites"]}}
+               "level_source": {s["id"]: s.get("source", "model") for s in result["sites"]},
+               "sightings": {s["id"]: s["sighting"] for s in result["sites"] if any(s.get("sighting") or ())}}
     (out / "history" / f"{day}.json").write_text(json.dumps(summary, separators=(",", ":")), encoding="utf-8")
     dates = sorted(p.stem for p in (out / "history").glob("20*.json"))
     (out / "history" / "index.json").write_text(json.dumps(dates), encoding="utf-8")
@@ -337,8 +373,9 @@ def main(argv=None) -> int:
             return 1
         context, context_notes = fetch_context(region, now, log)
         notes += context_notes
+    sightings = () if args.sample else load_sightings(pathlib.Path(args.out) / "reports.geojson")
     result = build(region, afai, currents, land, notes, args.sample, now, wind=wind, sir_levels=sir_levels,
-                   wind_from=wind_from, context=context, daily=daily)
+                   wind_from=wind_from, context=context, daily=daily, sightings=sightings)
     write_outputs(result, pathlib.Path(args.out), now, history=not args.no_history)
     log(f"{result['stats']['detected']} pixels flagged, {len(result['forecast'][0])} particles on the map, "
         f"AFAI time {result['sources']['afai']['time']}")
