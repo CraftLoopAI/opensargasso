@@ -5,6 +5,7 @@
                 map: null, layers: {}, markers: {} };
   var STALE_DAYS = 10, OUTDATED_DAYS = 2, DAY_MS = 864e5, STEP_MS = 900, UNCERTAIN_FROM = 4;  // persistence loses skill after day 3
   var WEEK_DAYS = 7, RECENT_DAYS = 3;  // the satellite composite's days; sightings this recent get the sargassum colors
+  var SIR_STALE_DAYS = 3;  // a SIR report comes out the afternoon after its day: normally 1 or 2 days old, 3 when one is late
   var ICON = {
     play: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9.5-5.5z" fill="currentColor"/></svg>',
     pause: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 2.5h3.2v11H3.5zM9.3 2.5h3.2v11H9.3z" fill="currentColor"/></svg>',
@@ -160,6 +161,9 @@
     $("sample").hidden = !(d && d.sample); $("sample").textContent = t("sample");
     var age = d ? ageDays(d.sources.afai.time) : null, built = d ? ageDays(d.generated) : null;
     $("stale").hidden = !(age != null && age > STALE_DAYS); $("stale").textContent = t("stale", age);
+    var sir = sirInfo(), sirAge = sir ? ageDays(sir.date) : null;
+    $("sirstale").hidden = !(sirAge != null && sirAge > SIR_STALE_DAYS);
+    $("sirstale").textContent = sir ? t("sirStale", { d: fmtDate(sir.date), n: sirAge }) : "";
     $("outdated").hidden = !(built != null && built >= OUTDATED_DAYS && !d.sample);
     $("outdated").textContent = d ? t("outdated", { d: fmtDate(d.generated) }) : "";
   }
